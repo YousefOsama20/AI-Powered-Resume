@@ -1,0 +1,156 @@
+"""
+VectorDBController
+──────────────────
+Handles interaction with ChromaDB to persist, query, and delete resume chunks.
+"""
+
+import os
+from typing import List, Dict, Any
+
+import chromadb
+from chromadb.config import Settings as ChromaSettings
+
+from .BaseController import BaseController
+from models.enums.ResumeSectionEnum import ResumeSectionEnum
+
+
+class VectorDBController(BaseController):
+
+    def __init__(self):
+        super().__init__()
+        
+        # Ensure DB path exists
+        os.makedirs(self.app_settings.VECTOR_DB_PATH, exist_ok=True)
+        
+        # Initialize persistent ChromaDB client
+        self.chroma_client = chromadb.PersistentClient(
+            path=self.app_settings.VECTOR_DB_PATH,
+            settings=ChromaSettings(anonymized_telemetry=False)
+        )
+        
+        # We use a default collection name unless overridden
+        self.default_collection = self.app_settings.VECTOR_DB_COLLECTION
+        
+    def _get_collection(self, collection_name: str = None):
+        """Helper to get or create a collection."""
+        name = collection_name or self.default_collection
+        # In this project, we provide our own embeddings, so we don't strictly need 
+        # Chroma's default embedding function, but we can just let it default 
+        # or pass None if we only supply embeddings directly.
+        return self.chroma_client.get_or_create_collection(
+            name=name,
+            metadata={"hnsw:space": "cosine"} # Use cosine similarity
+        )
+
+    def index_chunks(self, 
+                     chunks: List[Any], # List of Langchain Documents
+                     embeddings: List[List[float]],
+                     collection_name: str = None) -> bool:
+        """
+        Upsert document chunks and their embeddings into ChromaDB.
+        Uses upsert, so re-indexing the same chunk_id will overwrite.
+        """
+        try:
+            collection = self._get_collection(collection_name)
+            
+            ids = [chunk.metadata.get("chunk_id") for chunk in chunks]
+            documents = [chunk.page_content for chunk in chunks]
+            metadatas = [chunk.metadata for chunk in chunks]
+
+            # Upsert in batches of 100 for safety (though Chroma can handle more)
+            batch_size = 100
+            for i in range(0, len(ids), batch_size):
+                collection.upsert(
+                    ids=ids[i:i+batch_size],
+                    embeddings=embeddings[i:i+batch_size],
+                    documents=documents[i:i+batch_size],
+                    metadatas=metadatas[i:i+batch_size]
+                )
+            return True
+        except Exception as e:
+            print(f"Error indexing to VectorDB: {e}")
+            return False
+
+    def search(self, query_embedding: List[float], project_id: str,n_results: int = 5,
+                    section_filter: str = None, collection_name: str = None) -> List[Dict[str, Any]]:
+        """
+        Perform a similarity search scoped to a specific project.
+        Can optionally filter by a specific resume section.
+        """
+        try:
+            collection = self._get_collection(collection_name)
+            
+            # Base where clause to scope to the specific project
+            where_clause = {"project_id": project_id}
+            
+            # Optionally add section filter
+            if section_filter and section_filter in [e.value for e in ResumeSectionEnum]:
+                # Chroma requires a $and if multiple conditions, but since we 
+                # have simple equality, we can use $and.
+                where_clause = {
+                    "$and": [
+                        {"project_id": project_id},
+                        {"section": section_filter}
+                    ]
+                }
+            
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results,
+                where=where_clause,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            # Format the output
+            formatted_results = []
+            if results["ids"] and len(results["ids"]) > 0 and len(results["ids"][0]) > 0:
+                for i in range(len(results["ids"][0])):
+                    formatted_results.append({
+                        "id": results["ids"][0][i],
+                        "document": results["documents"][0][i],
+                        "metadata": results["metadatas"][0][i],
+                        "distance": results["distances"][0][i],
+                        "score": 1 - results["distances"][0][i] # roughly convert distance to similarity score
+                    })
+                    
+            return formatted_results
+        except Exception as e:
+            print(f"Error searching VectorDB: {e}")
+            return []
+
+    def delete_by_file(self, project_id: str, file_id: str, collection_name: str = None) -> bool:
+        """Deletes all chunks associated with a specific file."""
+        try:
+            collection = self._get_collection(collection_name)
+            
+            where_clause = {
+                "$and": [
+                    {"project_id": project_id},
+                    {"file_id": file_id}
+                ]
+            }
+            
+            # Chroma deletes matching metadatas
+            collection.delete(where=where_clause)
+            return True
+        except Exception as e:
+            print(f"Error deleting file from VectorDB: {e}")
+            return False
+
+    def delete_by_project(self, project_id: str, collection_name: str = None) -> bool:
+        """Deletes all chunks associated with a specific project."""
+        try:
+            collection = self._get_collection(collection_name)
+            collection.delete(where={"project_id": project_id})
+            return True
+        except Exception as e:
+            print(f"Error deleting project from VectorDB: {e}")
+            return False
+
+    def get_collection_count(self, collection_name: str = None) -> int:
+        """Returns total items in the collection."""
+        try:
+            collection = self._get_collection(collection_name)
+            return collection.count()
+        except:
+            return 0
