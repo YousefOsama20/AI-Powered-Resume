@@ -27,3 +27,10 @@ class ResponseSignal(Enum):
     VECTORDB_SEARCH_FAILED = "vectordb_search_failed"
     VECTORDB_DELETE_SUCCESS = "vectordb_delete_success"
     VECTORDB_DELETE_FAILED = "vectordb_delete_failed"
+
+    # ── Match signals ─────────────────────────────────────────────────────
+    MATCH_SUCCESS = "match_success"
+    MATCH_FAILED = "match_failed"
+    EMPTY_JOB_DESCRIPTION = "empty_job_description"
+
+

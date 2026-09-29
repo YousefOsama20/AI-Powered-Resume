@@ -1,21 +1,29 @@
-FROM python:3.10-slim
-
-# Install system dependencies (needed for python-magic)
-RUN apt-get update && apt-get install -y \
-    libmagic1 \
-    && rm -rf /var/lib/apt/lists/*
+# ============================================================
+# Stage 1: Python + Requirements
+# ============================================================
+FROM python:3.11-slim AS dependencies
 
 WORKDIR /app
 
-# Install Python dependencies
+# Copy requirements file
 COPY src/requirements.txt .
+
+# Install Python libraries
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY src /app/src
 
-WORKDIR /app/src
+# ============================================================
+# Stage 2: Application Code
+# ============================================================
+FROM dependencies AS application
 
+WORKDIR /app
+
+# Copy your project
+COPY . .
+
+# Expose FastAPI port
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run FastAPI
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
