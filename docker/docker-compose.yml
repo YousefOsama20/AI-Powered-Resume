@@ -1,0 +1,27 @@
+services:
+
+  # ==========================================================
+  # Image 1: Python + Requirements
+  # ==========================================================
+  dependencies:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: dependencies
+    image: ai-dependencies
+
+
+  # ==========================================================
+  # Image 2: Python + Requirements + Project Code
+  # ==========================================================
+  application:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: application
+    image: ai-resume-application
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ../src/assets:/app/src/assets
