@@ -20,6 +20,8 @@ services:
       dockerfile: docker/Dockerfile
       target: application
     image: ai-resume-application
+    env_file:
+      - ../src/.env
     ports:
       - "8000:8000"
 
