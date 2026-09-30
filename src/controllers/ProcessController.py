@@ -13,15 +13,18 @@ from models.enums import ProcessingEnum, ResumeSectionEnum, SECTION_PATTERNS
 class ProcessController(BaseController):
 
     def __init__(self, project_id: str):
+        # Type: Sub-function
         super().__init__()
         self.project_id = project_id
         self.project_path = ProjectController().get_project_path(project_id=project_id)
 
-    def get_file_extension(self, file_id: str) -> str:
+    def _get_file_extension(self, file_id: str) -> str:
+        # Type: Sub-function
         return os.path.splitext(file_id)[-1].lower()
 
-    def get_file_loader(self, file_id: str) -> list:
-        file_ext = self.get_file_extension(file_id=file_id)
+    def _get_file_loader(self, file_id: str) -> list:
+        # Type: Sub-function
+        file_ext = self._get_file_extension(file_id=file_id)
         file_path = os.path.join(self.project_path, file_id)
 
         if not os.path.exists(file_path):
@@ -36,9 +39,11 @@ class ProcessController(BaseController):
         return []
 
     def get_file_content(self, file_id: str) -> list:
-        return self.get_file_loader(file_id=file_id)
+        # Type: Main function
+        return self._get_file_loader(file_id=file_id)
 
-    def clean_text(self, text: str) -> str:
+    def _clean_text(self, text: str) -> str:
+        # Type: Sub-function
         """Strip control characters and normalize whitespace."""
         if not text:
             return ""
@@ -48,6 +53,7 @@ class ProcessController(BaseController):
         return cleaned.strip()
 
     def match_section_header(self, line: str) -> Union[str, None]:
+        # Type: Sub-function
         """Checks if a single line matches any standard resume section header."""
         stripped = line.strip()
         if not stripped or len(stripped) > 40:
@@ -59,6 +65,7 @@ class ProcessController(BaseController):
         return None
 
     def segment_text_into_sections(self, full_text: str) -> Dict[str, str]:
+        # Type: Sub-function
         """
         Parses full resume text into classified sections.
         Lines before the first identified section are tagged as Summary.
@@ -79,7 +86,7 @@ class ProcessController(BaseController):
 
         cleaned_sections = {}
         for section_name, section_lines in sections.items():
-            content = self.clean_text("\n".join(section_lines))
+            content = self._clean_text("\n".join(section_lines))
             if content:
                 cleaned_sections[section_name] = content
 
@@ -87,6 +94,7 @@ class ProcessController(BaseController):
 
     def process_file_content(self,file_content: List[Union[Document, dict, str]],
                                 file_id: str,chunk_size: int = 500,overlap_size: int = 50) -> List[Document]:
+        # Type: Main function
         """
         1. Aggregates and cleans document text.
         2. Detects sections (Skills, Experience, Education, Projects, Certifications).

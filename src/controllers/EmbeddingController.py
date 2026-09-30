@@ -27,6 +27,7 @@ class EmbeddingController(BaseController):
     _model: SentenceTransformer | None = None
 
     def __init__(self):
+        # Type: Sub-function
         super().__init__()
         self._ensure_model_loaded()
 
@@ -35,6 +36,7 @@ class EmbeddingController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _ensure_model_loaded(self) -> None:
+        # Type: Sub-function
         """Load the sentence-transformer model once and cache it at class level."""
         if EmbeddingController._model is None:
             model_name = self.app_settings.EMBEDDING_MODEL_NAME
@@ -44,6 +46,7 @@ class EmbeddingController(BaseController):
 
     @property
     def model(self) -> SentenceTransformer:
+        # Type: Main function
         return EmbeddingController._model  # type: ignore[return-value]
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -51,6 +54,7 @@ class EmbeddingController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def embed_text(self, text: str) -> List[float]:
+        # Type: Main function
         """
         Embed a single text string.
 
@@ -63,6 +67,7 @@ class EmbeddingController(BaseController):
         return vector.tolist()
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        # Type: Main function
         """
         Embed a batch of text strings.
 

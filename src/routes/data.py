@@ -18,6 +18,7 @@ data_router = APIRouter(
 @data_router.post("/upload/{project_id}")
 async def upload_data(project_id: str, file: UploadFile,
                       app_settings: Settings = Depends(get_settings)):
+    # Type: Main function
         
     
     # validate the file properties
@@ -63,6 +64,7 @@ async def upload_data(project_id: str, file: UploadFile,
 
 @data_router.post("/process/{project_id}")
 async def process_endpoint(project_id: str, process_request: ProcessRequest):
+    # Type: Main function
 
     file_id = process_request.file_id
     chunk_size = process_request.chunk_size

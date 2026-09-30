@@ -5,6 +5,7 @@ from docx import Document
 
 
 def load_pdf(file_path: str) -> list[dict]:
+    # Type: Main function
     """Load a PDF page by page while preserving page numbers."""
 
     path = Path(file_path)
@@ -33,6 +34,7 @@ def load_pdf(file_path: str) -> list[dict]:
 
 
 def load_docx(file_path: str) -> list[dict]:
+    # Type: Main function
     """Load a DOCX file while preserving source metadata."""
 
     path = Path(file_path)

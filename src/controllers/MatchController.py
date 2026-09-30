@@ -11,12 +11,14 @@ class MatchController:
     and Experience Score with a 55% Semantic / 35% Keyword / 10% Experience weighting.
     """
     def __init__(self):
+        # Type: Sub-function
         self.vector_db = VectorDBController()
         self.embedding = EmbeddingController()
         self.extraction = ExtractionController()
         self.experience = ExperienceController()
         
     def match_candidates(self, job_description: str, project_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        # Type: Main function
         # 1. Extract JD requirements and create embedding
         jd_skills = set(self.extraction.extract_skills(job_description))
         jd_embedding = self.embedding.embed_text(job_description)
