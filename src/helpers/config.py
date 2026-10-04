@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str
     EMBEDDING_BATCH_SIZE: int = 64
 
+    # ── LLM Generation (OpenAI-compatible API) ────────────────────────────────
+    GENERATION_BACKEND: str = None
+    GENERATION_API_KEY: str = None
+    GENERATION_API_URL: str = None
+    GENERATION_MODEL_ID: str = None
+    GENERATION_MAX_TOKENS: int = None
+    GENERATION_TEMPERATURE: float = None
+    INPUT_DAFAULT_MAX_CHARACTERS: int = None
+    # ── Template Configs ───────────────────────────────────────────────────────
+    PRIMARY_LANG: str = "en"
+    DEFAULT_LANG: str = "en"
+
     class Config:
         env_file = ".env"
 
