@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 import logging
 
-from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController
+from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController
 from models import ResponseSignal
 from .schemes.nlp import NLPIndexRequest, NLPMatchRequest
 
@@ -19,6 +19,7 @@ async def index_file(project_id: str, request: NLPIndexRequest):
     # Type: Main function
     """
     Parse a file, embed its chunks, and store them in the Vector DB.
+    Uses LLM for skill extraction if available, falls back to taxonomy.
     """
     try:
         # 1. Parse and chunk the file
@@ -48,12 +49,34 @@ async def index_file(project_id: str, request: NLPIndexRequest):
         embedding_controller = EmbeddingController()
         extraction_controller = ExtractionController()
         experience_controller = ExperienceController()
+        llm_extraction_controller = LLMExtractionController()
         
+        # Combine all chunk text for a single LLM call (more accurate + saves API calls)
+        full_resume_text = "\n\n".join([chunk.page_content for chunk in chunks])
+        
+        # Try LLM extraction first, fallback to taxonomy
+        llm_skills = []
+        if llm_extraction_controller.is_available:
+            llm_skills = llm_extraction_controller.extract_skills_from_cv(full_resume_text)
+            logger.info(f"[Index] LLM extracted {len(llm_skills)} skills from CV")
+
         texts_to_embed = []
         for chunk in chunks:
             texts_to_embed.append(chunk.page_content)
-            skills = extraction_controller.extract_skills(chunk.page_content)
-            chunk.metadata["skills"] = ",".join(skills)
+            
+            # Use LLM skills if available, otherwise fallback to taxonomy per-chunk
+            if llm_skills:
+                # Filter LLM skills to those relevant to this chunk
+                chunk_text_lower = chunk.page_content.lower()
+                chunk_skills = [s for s in llm_skills if s in chunk_text_lower]
+                # If no LLM skills matched this specific chunk, use taxonomy as backup
+                if not chunk_skills:
+                    chunk_skills = extraction_controller.extract_skills(chunk.page_content)
+            else:
+                # Fallback: taxonomy-based extraction (old method)
+                chunk_skills = extraction_controller.extract_skills(chunk.page_content)
+            
+            chunk.metadata["skills"] = ",".join(chunk_skills)
 
             # Extract years of experience from Experience-section chunks
             if chunk.metadata.get("section") == "Experience":
@@ -118,7 +141,7 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
             )
 
         match_controller = MatchController()
-        results = match_controller.match_candidates(
+        results, jd_skills= match_controller.match_candidates(
             job_description=request.job_description,
             project_id=project_id,
             top_k=request.top_k
@@ -128,6 +151,7 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
             content={
                 "signal": ResponseSignal.MATCH_SUCCESS.value,
                 "project_id": project_id,
+                "jd_skills": jd_skills,
                 "results": results
             }
         )

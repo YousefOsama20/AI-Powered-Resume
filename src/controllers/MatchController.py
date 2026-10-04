@@ -138,6 +138,7 @@ class MatchController:
             hybrid_score = (avg_semantic * 0.35) + (jaccard * 0.35) + (exp_score * 0.30)
             
             missing_skills = list(jd_skills - candidate_skills)
+            matched_skills = list(jd_skills.intersection(candidate_skills))
             
             ranked_candidates.append({
                 "candidate_id": file_id,
@@ -148,11 +149,11 @@ class MatchController:
                 "required_experience": required_exp,
                 "candidate_experience": candidate_exp,
                 "experience_gap": experience_gap,
-                "jd_skills": list(jd_skills),
-                "extracted_skills": list(candidate_skills),
-                "missing_skills": missing_skills
+                "matched_skills": matched_skills,
+                "missing_skills": missing_skills,
+                "extracted_skills": list(candidate_skills)
             })
             
         # Sort by hybrid match_score descending
         ranked_candidates.sort(key=lambda x: x["match_score"], reverse=True)
-        return ranked_candidates[:top_k]
+        return ranked_candidates[:top_k], list(jd_skills)
