@@ -48,6 +48,20 @@ Handles NLP-based extraction of skills based on a defined taxonomy.
 *   **`get_track_names`**: (Main function) Returns a list of all available career track names.
 *   **`extract_skills`**: (Main function) Extracts matched skills from text, with an optional filter list. Used in `routes/nlp.py` and `MatchController.py`.
 
+### `JDController.py`
+Manages persistent storage of Job Descriptions natively in a dedicated ChromaDB collection (`jds`).
+*   **`__init__`**: (Sub-function) Initializes the controller and connects to VectorDB.
+*   **`store_jd`**: (Main function) Stores a Job Description entirely in ChromaDB as a single document (text, embeddings, skills metadata).
+*   **`get_jd`**: (Main function) Retrieves a stored Job Description and its metadata from ChromaDB.
+*   **`list_jds`**: (Main function) Returns a list of all stored JD names with their skills and experience.
+*   **`delete_jd`**: (Main function) Deletes a JD from ChromaDB.
+
+### `LLMExtractionController.py`
+Handles LLM-powered extraction of skills and metadata, acting as a smarter alternative to the taxonomy-based `ExtractionController`.
+*   **`__init__`**: (Sub-function) Initializes the LLM provider.
+*   **`extract_skills_from_jd`**: (Main function) Uses an LLM to dynamically extract required skills from a job description text.
+*   **`extract_skills_from_cv`**: (Main function) Uses an LLM to dynamically extract candidate skills from resume chunks.
+
 ### `MatchController.py`
 Orchestrates the matching of candidate resumes against job descriptions.
 *   **`__init__`**: (Sub-function) Initializes dependencies, including VectorDB, Extraction, and Experience controllers.

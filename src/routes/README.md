@@ -25,6 +25,22 @@ The `routes` folder in this project is responsible for defining the API endpoint
   - **What it does:** Handles the `POST /api/v1/nlp/index/{project_id}` endpoint. It parses and chunks a file, extracts skills and experience, generates vector embeddings for the text chunks, and stores the embedded chunks in a Vector DB.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `ProcessController`, `EmbeddingController`, `ExtractionController`, `ExperienceController`, and `VectorDBController`.
+- **Function/Route:** `get_indexed_files`
+  - **What it does:** Handles the `GET /api/v1/nlp/files` endpoint. Retrieves a list of all indexed files and their associated project IDs from the Vector DB.
+  - **Type:** Main route function.
+  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
+- **Function/Route:** `list_job_descriptions`
+  - **What it does:** Handles the `GET /api/v1/nlp/jd` endpoint. Returns a list of all stored Job Descriptions.
+  - **Type:** Main route function.
+  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `JDController`.
+- **Function/Route:** `store_job_description`
+  - **What it does:** Handles the `POST /api/v1/nlp/jd` endpoint. Extracts skills and requirements from a Job Description and stores it persistently in ChromaDB.
+  - **Type:** Main route function.
+  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `LLMExtractionController`, `ExperienceController`, `EmbeddingController`, and `JDController`.
+- **Function/Route:** `update_job_description`
+  - **What it does:** Handles the `PUT /api/v1/nlp/jd` endpoint. Updates an existing Job Description by re-extracting its metadata and overwriting its ChromaDB record.
+  - **Type:** Main route function.
+  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `LLMExtractionController`, `ExperienceController`, `EmbeddingController`, and `JDController`.
 - **Function/Route:** `match_resumes`
   - **What it does:** Handles the `POST /api/v1/nlp/match/{project_id}` endpoint. It matches a provided job description against all indexed candidates in a project using a Hybrid ATS Scoring Engine (semantic + keyword).
   - **Type:** Main route function.
@@ -48,10 +64,10 @@ The `routes` folder in this project is responsible for defining the API endpoint
   - **Where it is used:** Imported and used in `src/routes/data.py` by the `process_endpoint` function for request validation.
 
 ### `schemes/nlp.py`
-- **Model:** `NLPIndexRequest` & `NLPMatchRequest`
-  - **What it does:** Defines Pydantic data models for NLP index and match requests, validating fields like `file_id`, `job_description`, `top_k`, etc.
+- **Models:** `NLPIndexRequest`, `NLPMatchRequest`, `NLPJDStoreRequest`, `NLPJDUpdateRequest`, `NLPdeleteRequest`
+  - **What it does:** Defines Pydantic data models for NLP requests, validating fields like `file_id`, `job_description`, `jd_name`, `project_id`, etc.
   - **Type:** Pydantic Schemas (Classes).
-  - **Where it is used:** Imported and used in `src/routes/nlp.py` by the `index_file` and `match_resumes` functions for request validation.
+  - **Where it is used:** Imported and used in `src/routes/nlp.py` by the various endpoint functions for request validation.
 
 ### `schemes/__init__.py`
 - Used to make the `schemes` directory a Python package.
