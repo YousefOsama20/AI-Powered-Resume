@@ -1,7 +1,8 @@
 # ============================================================
-# Stage 1: Python + Requirements
+# Python + Requirements + Application
 # ============================================================
-FROM python:3.11-slim AS dependencies
+
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -9,22 +10,16 @@ WORKDIR /app
 COPY src/requirements.txt .
 
 # Install Python libraries
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install requirements.txt
 
-
-# ============================================================
-# Stage 2: Application Code
-# ============================================================
-FROM dependencies AS application
-
-WORKDIR /app
-
-# Copy your project
+# Copy application code
 COPY . .
 
-# Expose FastAPI port
+# FastAPI port
 EXPOSE 8000
 
+# Python import path
 ENV PYTHONPATH=/app/src
+
 # Run FastAPI
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
