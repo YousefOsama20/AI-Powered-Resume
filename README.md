@@ -446,7 +446,7 @@ nano src/.env                      # fill in OPENAI_API_KEY if needed
 
 # 5. Run the server from the src/ directory  ← IMPORTANT
 cd src
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python main.py
 ```
 
 The server will be available at:
