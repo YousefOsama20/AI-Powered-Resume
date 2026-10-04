@@ -1,0 +1,62 @@
+[
+  {
+    "jd_name": "Senior Python Developer",
+    "job_description": "We are seeking a Senior Python Developer with at least 5 years of experience to join our backend team. You will be responsible for designing and building scalable REST APIs using FastAPI and Django. The ideal candidate has deep expertise in PostgreSQL, Redis, and message brokers like RabbitMQ or Kafka. You must be comfortable working in a Dockerized environment and deploying services to AWS using CI/CD pipelines (GitHub Actions). Strong problem-solving skills, mentoring junior developers, and Agile methodology experience are required. Knowledge of frontend frameworks (React) is a plus."
+  },
+  {
+    "jd_name": "Senior AI Developer",
+    "job_description": "We are looking for a Senior AI Developer to lead our generative AI initiatives. You must have a minimum of 6 years of experience in software engineering, with at least 3 years focused on Machine Learning and NLP. You will build and optimize RAG (Retrieval-Augmented Generation) pipelines using ci/cd,LangChain, LlamaIndex, and vector databases like ChromaDB or Pinecone. Proficiency in Python, PyTorch, and deploying models using HuggingFace or OpenAI APIs is required. You should have experience with cloud platforms (GCP or Azure) and model evaluation techniques. Excellent communication skills are essential as you will collaborate closely with product managers."
+  },
+  {
+    "jd_name": "Junior Frontend Developer",
+    "job_description": "We are hiring a Junior Frontend Developer with at least 1 year of experience. You will build responsive user interfaces using React.js, HTML5, CSS3, and JavaScript ES6+. Familiarity with state management tools like Redux or Context API is preferred. You should understand RESTful API integration, Git version control, and basic testing with Jest. Experience with Figma or Adobe XD for design handoff is a plus. We value strong communication skills, attention to detail, and eagerness to learn in an Agile Scrum environment."
+  },
+  {
+    "jd_name": "Mid-Level Backend Developer",
+    "job_description": "Looking for a Mid-Level Backend Developer with 3 years of professional experience. You will design and maintain microservices using Node.js and Express or Python with FastAPI. Strong knowledge of PostgreSQL, MongoDB, and Redis caching is required. You must have hands-on experience with Docker, Kubernetes, and CI/CD pipelines using GitHub Actions or Jenkins. Familiarity with message queues like RabbitMQ or Kafka is highly desirable. The role requires solid understanding of software design patterns, unit testing, API security with JWT and OAuth2, and experience working in cross-functional teams."
+  },
+  {
+    "jd_name": "Senior Full-Stack Engineer",
+    "job_description": "We are seeking a Senior Full-Stack Engineer with 6+ years of experience to lead development of our SaaS platform. You will architect scalable systems using React or Next.js on the frontend and Python Django or FastAPI on the backend. Deep expertise in PostgreSQL, Elasticsearch, and GraphQL APIs is required. You must have production experience with AWS services (EC2, S3, Lambda, RDS, CloudFront), Terraform for infrastructure as code, and monitoring tools like Datadog or Grafana. Leadership skills are essential — you will mentor junior developers, conduct code reviews, and drive technical decisions. Experience with WebSockets, real-time systems, and performance optimization is a strong plus."
+  },
+  {
+    "jd_name": "Junior AI Engineer",
+    "job_description": "We are looking for a Junior AI Engineer with 1 year of experience or strong academic projects in machine learning. You will assist in data preprocessing, feature engineering, and training ML models using Scikit-learn, Pandas, and NumPy. Basic understanding of neural networks and deep learning frameworks like TensorFlow or PyTorch is required. You should be comfortable writing Python scripts for data scraping and automation. Familiarity with Jupyter Notebooks, Git, SQL, and basic Linux commands is expected. We value curiosity about AI research, strong problem-solving abilities, and willingness to learn from senior engineers in a collaborative team environment."
+  },
+  {
+    "jd_name": "Mid-Level ML Engineer",
+    "job_description": "Seeking a Mid-Level Machine Learning Engineer with 3 years of experience building and deploying ML pipelines in production. You will develop NLP and computer vision models using PyTorch and HuggingFace Transformers. Strong experience with MLOps tools including MLflow, DVC, and Airflow for experiment tracking and pipeline orchestration is required. You must be proficient in Python, SQL, and cloud platforms (AWS SageMaker or GCP Vertex AI). Experience with vector databases like Pinecone or ChromaDB, embedding models, and semantic search is highly valued. You should understand model evaluation metrics, A/B testing, and be able to communicate results to non-technical stakeholders."
+  },
+  {
+    "jd_name": "Junior DevOps Engineer",
+    "job_description": "We are looking for a Junior DevOps Engineer with 1 year of experience to support our infrastructure team. You will manage CI/CD pipelines using GitHub Actions and Jenkins, write automation scripts in Bash and Python, and maintain Docker containers. Basic knowledge of Linux system administration, Nginx, and networking fundamentals (DNS, TCP/IP, HTTP) is required. Familiarity with cloud platforms like AWS (EC2, S3, IAM) or GCP is preferred. You should understand Git workflows, log monitoring with ELK Stack, and basic security practices. Strong troubleshooting skills, teamwork, and willingness to be on-call rotation are expected."
+  },
+  {
+    "jd_name": "Senior Cloud Architect",
+    "job_description": "Seeking a Senior Cloud Architect with 7+ years of experience designing enterprise-grade cloud infrastructure. You will lead multi-region deployments on AWS using Terraform and CloudFormation for infrastructure as code. Deep expertise in Kubernetes (EKS), service mesh (Istio), serverless architectures (Lambda, Step Functions), and event-driven systems (SNS, SQS, EventBridge) is required. You must have strong experience with cost optimization strategies, disaster recovery planning, and zero-downtime deployments. Knowledge of security best practices including IAM policies, VPC design, encryption at rest and in transit, and SOC2 compliance is essential. You will present architecture decisions to C-level executives and mentor a team of 5 engineers."
+  },
+  {
+    "jd_name": "Junior Data Engineer",
+    "job_description": "Hiring a Junior Data Engineer with 1 year of experience to join our analytics team. You will build and maintain ETL pipelines using Python and Apache Airflow, transform raw data using Pandas and SQL, and load it into data warehouses like BigQuery or Snowflake. Basic understanding of data modeling, star schema design, and data quality validation is required. You should be familiar with Git, Docker, and cloud storage services like AWS S3 or GCS. Experience with dbt for data transformation and basic visualization tools like Metabase or Looker is a plus. We value attention to detail, analytical thinking, and good documentation habits."
+  },
+  {
+    "jd_name": "Senior Data Engineer",
+    "job_description": "We need a Senior Data Engineer with 5+ years of experience to architect our real-time data platform. You will design streaming pipelines using Apache Kafka, Apache Spark, and Apache Flink for processing millions of events per second. Deep expertise in data warehousing with Snowflake or Databricks, data lakehouse architectures using Delta Lake, and orchestration with Airflow or Prefect is required. You must be proficient in Python, Scala, and advanced SQL. Experience with data governance tools, data lineage tracking, Great Expectations for data quality, and cost optimization of cloud data workloads on AWS or GCP is essential. Leadership experience including mentoring, sprint planning, and stakeholder management is required."
+  },
+  {
+    "jd_name": "Junior Mobile Developer",
+    "job_description": "Looking for a Junior Mobile Developer with 1 year of experience building mobile apps. You will develop cross-platform applications using Flutter and Dart or React Native with TypeScript. Understanding of mobile UI/UX principles, responsive layouts, and state management (Provider, Riverpod, or Redux) is required. You should know how to integrate REST APIs, handle local storage with SQLite or Hive, and implement push notifications using Firebase Cloud Messaging. Basic knowledge of Git, app store deployment processes (Google Play and Apple App Store), and debugging with Chrome DevTools is expected. Good communication skills and a portfolio of published apps is a strong plus."
+  },
+  {
+    "jd_name": "Senior iOS Engineer",
+    "job_description": "We are hiring a Senior iOS Engineer with 5+ years of experience building high-performance native iOS applications using Swift and SwiftUI. You must have deep expertise in MVVM and Clean Architecture patterns, Combine framework for reactive programming, and Core Data for local persistence. Experience with URLSession, Alamofire, and GraphQL for networking is required. You should be proficient in unit testing with XCTest, UI testing, and performance profiling with Instruments. Knowledge of CI/CD for mobile using Fastlane and Bitrise, App Store Connect submission process, and accessibility standards (WCAG) is essential. You will lead a team of 3 iOS developers and conduct code reviews."
+  },
+  {
+    "jd_name": "Junior Security Analyst",
+    "job_description": "Hiring a Junior Security Analyst with 1 year of experience to join our SOC team. You will monitor security alerts using SIEM tools like Splunk or QRadar, analyze network traffic for anomalies, and assist in incident response procedures. Basic knowledge of firewalls, IDS/IPS systems, and vulnerability scanning tools like Nessus or OpenVAS is required. You should understand OWASP Top 10 web vulnerabilities, basic penetration testing concepts, and networking protocols (TCP/IP, DNS, HTTP/S). Familiarity with Linux command line, Python scripting for automation, and security frameworks like NIST or ISO 27001 is preferred. CompTIA Security+ or equivalent certification is a plus."
+  },
+  {
+    "jd_name": "Senior Penetration Tester",
+    "job_description": "We are seeking a Senior Penetration Tester with 5+ years of hands-on experience in offensive security. You will conduct web application, network, and API penetration tests using tools like Burp Suite, Metasploit, Nmap, and custom Python exploits. Deep expertise in OWASP testing methodology, Active Directory attacks, privilege escalation, and social engineering is required. You must be proficient in writing detailed technical reports and presenting findings to executive leadership. Experience with cloud security assessments (AWS, Azure), container security (Docker, Kubernetes), and mobile application testing is highly valued. OSCP, OSCE, or GPEN certification is required. You will mentor junior testers and develop internal red team playbooks."
+  }
+]
