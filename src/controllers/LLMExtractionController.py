@@ -141,6 +141,46 @@ class LLMExtractionController(BaseController):
         logger.info(f"[LLMExtractionController] Extracted {len(skills)} skills from JD via LLM")
         return skills
 
+    def extract_skills_from_cv(self, resume_text: str) -> List[str]:
+        # Type: Main function
+        """
+        Extracts all skills from a CV/resume using the LLM.
+        Prompts are loaded from templates/locales/{lang}/skill_extraction.py.
+
+        Args:
+            resume_text: The full resume text (all sections combined).
+
+        Returns:
+            List of extracted skill strings (lowercased).
+            Returns empty list if LLM is not available.
+        """
+        if not resume_text or not resume_text.strip():
+            return []
+
+        if self._llm_provider is None:
+            logger.warning("[LLMExtractionController] LLM not available for CV extraction.")
+            return []
+
+        # Load CV-specific prompts from template system
+        system_prompt = self.template_parser.get("skill_extraction", "cv_system_prompt")
+        user_prompt = self.template_parser.get(
+            "skill_extraction", "cv_user_prompt",
+            vars={"resume_text": resume_text}
+        )
+
+        if not system_prompt or not user_prompt:
+            logger.error("[LLMExtractionController] Failed to load CV prompt templates.")
+            return []
+
+        response = self._llm_provider.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt
+        )
+
+        skills = self._parse_skills_response(response)
+        logger.info(f"[LLMExtractionController] Extracted {len(skills)} skills from CV via LLM")
+        return skills
+
     @property
     def is_available(self) -> bool:
         # Type: Main function
