@@ -9,9 +9,6 @@ class Settings(BaseSettings):
     APP_NAME: str
     APP_VERSION: str
 
-    # ── API Keys (optional – not used by the local embedding pipeline) ─────────
-    OPENAI_API_KEY: str = ""
-
     # ── File Upload Settings ───────────────────────────────────────────────────
     FILE_ALLOWED_TYPES: List[str]
     FILE_MAX_SIZE: int
