@@ -1,7 +1,28 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from routes import base, data, nlp
+from stores.llm.LLMProviderFactory import LLMProviderFactory
+from helpers.config import get_settings
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    llm_provider_factory = LLMProviderFactory(settings)
+
+    # generation client
+    app.generation_client = llm_provider_factory.create(provider=settings.GENERATION_BACKEND)
+    app.generation_client.set_generation_model(model_id=settings.GENERATION_MODEL_ID)
+    
+    yield
+    
+    if hasattr(app, 'db_engine'):
+        app.db_engine.dispose()
+    if hasattr(app, 'vectordb_client'):
+        app.vectordb_client.disconnect()
+
+app = FastAPI(lifespan=lifespan)
+
 app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(nlp.nlp_router)
+

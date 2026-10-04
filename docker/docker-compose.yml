@@ -1,25 +1,21 @@
 services:
 
   # ==========================================================
-  # Image 1: Python + Requirements
-  # ==========================================================
-  dependencies:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      target: dependencies
-    image: ai-dependencies
-
-
-  # ==========================================================
-  # Image 2: Python + Requirements + Project Code
+  # Application
   # ==========================================================
   application:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-      target: application
+
     image: ai-resume-application
+
+    env_file:
+      - ../src/.env
+
+    environment:
+      VECTOR_DB_PATH: "/app/src/assets/vectordb"
+
     ports:
       - "8000:8000"
 

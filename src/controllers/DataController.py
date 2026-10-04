@@ -8,10 +8,12 @@ import os
 class DataController(BaseController):
     
     def __init__(self):
+        # Type: Sub-function
         super().__init__()
         self.size_scale = 1048576 # convert MB to bytes
 
     def validate_uploaded_file(self, file: UploadFile):
+        # Type: Main function
 
         if file.content_type not in self.app_settings.FILE_ALLOWED_TYPES:
             return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
@@ -22,6 +24,7 @@ class DataController(BaseController):
         return True, ResponseSignal.FILE_VALIDATED_SUCCESS.value
 
     def generate_unique_filepath(self, orig_file_name: str, project_id: str):
+        # Type: Main function
 
         random_key = self.generate_random_string()
         project_path = ProjectController().get_project_path(project_id=project_id)
@@ -45,6 +48,7 @@ class DataController(BaseController):
         return new_file_path, random_key + "_" + cleaned_file_name
 
     def get_clean_file_name(self, orig_file_name: str):
+        # Type: Main function
 
         # remove any special characters, except underscore and .
         cleaned_file_name = re.sub(r'[^\w.]', '', orig_file_name.strip())

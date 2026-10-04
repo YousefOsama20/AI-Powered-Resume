@@ -6,6 +6,7 @@ import string
 class BaseController:
     
     def __init__(self):
+        # Type: Sub-function
 
         self.app_settings = get_settings()
         
@@ -16,4 +17,5 @@ class BaseController:
         )
         
     def generate_random_string(self, length: int=12):
+        # Type: Main function
         return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))

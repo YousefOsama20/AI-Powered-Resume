@@ -5,4 +5,5 @@ from .EmbeddingController import EmbeddingController
 from .VectorDBController import VectorDBController
 from .ExtractionController import ExtractionController
 from .ExperienceController import ExperienceController
+from .LLMExtractionController import LLMExtractionController
 from .MatchController import MatchController

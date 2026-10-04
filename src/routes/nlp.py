@@ -16,6 +16,7 @@ nlp_router = APIRouter(
 
 @nlp_router.post("/index/{project_id}")
 async def index_file(project_id: str, request: NLPIndexRequest):
+    # Type: Main function
     """
     Parse a file, embed its chunks, and store them in the Vector DB.
     """
@@ -104,6 +105,7 @@ async def index_file(project_id: str, request: NLPIndexRequest):
 
 @nlp_router.post("/match/{project_id}")
 async def match_resumes(project_id: str, request: NLPMatchRequest):
+    # Type: Main function
     """
     Match Job Description against all indexed candidates in a project using 
     Hybrid ATS Scoring Engine (60% Semantic / 40% Keyword).
@@ -140,6 +142,7 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
 
 @nlp_router.delete("/{project_id}/file/{file_id}")
 async def delete_file_index(project_id: str, file_id: str):
+    # Type: Main function
     """
     Delete indexed chunks for a specific file in a project.
     """
@@ -173,6 +176,7 @@ async def delete_file_index(project_id: str, file_id: str):
 
 @nlp_router.delete("/{project_id}")
 async def delete_project_index(project_id: str):
+    # Type: Main function
     """
     Delete all indexed chunks for an entire project.
     """

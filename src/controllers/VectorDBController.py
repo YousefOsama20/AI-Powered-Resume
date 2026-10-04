@@ -17,6 +17,7 @@ from models.enums.ResumeSectionEnum import ResumeSectionEnum
 class VectorDBController(BaseController):
 
     def __init__(self):
+        # Type: Sub-function
         super().__init__()
         
         # Ensure DB path exists
@@ -32,6 +33,7 @@ class VectorDBController(BaseController):
         self.default_collection = self.app_settings.VECTOR_DB_COLLECTION
         
     def _get_collection(self, collection_name: str = None):
+        # Type: Sub-function
         """Helper to get or create a collection."""
         name = collection_name or self.default_collection
         # In this project, we provide our own embeddings, so we don't strictly need 
@@ -46,6 +48,7 @@ class VectorDBController(BaseController):
                      chunks: List[Any], # List of Langchain Documents
                      embeddings: List[List[float]],
                      collection_name: str = None) -> bool:
+        # Type: Main function
         """
         Upsert document chunks and their embeddings into ChromaDB.
         Uses upsert, so re-indexing the same chunk_id will overwrite.
@@ -73,6 +76,7 @@ class VectorDBController(BaseController):
 
     def search(self, query_embedding: List[float], project_id: str,n_results: int = 5,
                     section_filter: str = None, collection_name: str = None) -> List[Dict[str, Any]]:
+        # Type: Main function
         """
         Perform a similarity search scoped to a specific project.
         Can optionally filter by a specific resume section.
@@ -119,6 +123,7 @@ class VectorDBController(BaseController):
             return []
 
     def delete_by_file(self, project_id: str, file_id: str, collection_name: str = None) -> bool:
+        # Type: Main function
         """Deletes all chunks associated with a specific file."""
         try:
             collection = self._get_collection(collection_name)
@@ -138,6 +143,7 @@ class VectorDBController(BaseController):
             return False
 
     def delete_by_project(self, project_id: str, collection_name: str = None) -> bool:
+        # Type: Main function
         """Deletes all chunks associated with a specific project."""
         try:
             collection = self._get_collection(collection_name)
@@ -148,6 +154,7 @@ class VectorDBController(BaseController):
             return False
 
     def get_collection_count(self, collection_name: str = None) -> int:
+        # Type: Main function
         """Returns total items in the collection."""
         try:
             collection = self._get_collection(collection_name)
