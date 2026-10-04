@@ -161,3 +161,25 @@ class VectorDBController(BaseController):
             return collection.count()
         except:
             return 0
+
+    def get_all_indexed_files(self, collection_name: str = None) -> List[Dict[str, str]]:
+        # Type: Main function
+        """Returns a list of all unique project_id and file_id combinations in the DB."""
+        try:
+            collection = self._get_collection(collection_name)
+            
+            # Fetch all metadata
+            results = collection.get(include=["metadatas"])
+            
+            unique_files = set()
+            for meta in results.get("metadatas", []):
+                if meta:
+                    project_id = meta.get("project_id")
+                    file_id = meta.get("file_id")
+                    if project_id and file_id:
+                        unique_files.add((project_id, file_id))
+                    
+            return [{"project_id": p_id, "file_id": f_id} for p_id, f_id in unique_files]
+        except Exception as e:
+            print(f"Error fetching files from VectorDB: {e}")
+            return []

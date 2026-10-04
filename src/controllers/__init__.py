@@ -7,3 +7,4 @@ from .ExtractionController import ExtractionController
 from .ExperienceController import ExperienceController
 from .LLMExtractionController import LLMExtractionController
 from .MatchController import MatchController
+from .JDController import JDController

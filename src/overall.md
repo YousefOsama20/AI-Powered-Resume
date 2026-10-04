@@ -233,9 +233,81 @@ Parse an uploaded file and return section-aware chunks (does **not** store in ve
 
 ### 5.3 NLP Routes — `/api/v1/nlp`
 
+#### `GET /api/v1/nlp/files`
+
+List all CVs/resumes that have been indexed across all projects in the Vector Database.
+
+**Success Response:**
+```json
+{
+  "message": "Files retrieved successfully.",
+  "total": 2,
+  "files": [
+    { "project_id": "job_123", "file_id": "candidate_a.pdf" }
+  ]
+}
+```
+
+---
+
+#### `GET /api/v1/nlp/jd`
+
+List all Job Descriptions (JDs) that have been saved in the local JSON database.
+
+**Success Response:**
+```json
+{
+  "message": "Job descriptions retrieved successfully.",
+  "total": 3,
+  "jds": [
+    "Senior Python Developer",
+    "Senior AI Developer"
+  ]
+}
+```
+
+---
+
+#### `POST /api/v1/nlp/jd`
+
+Extracts skills, embeddings, and required experience from a Job Description using an LLM, and stores them persistently under a `jd_name`.
+
+**Body (JSON):**
+```json
+{
+  "jd_name": "Senior Python Developer",
+  "job_description": "We are seeking a Python Developer with 5 years experience..."
+}
+```
+
+**Success Response:**
+```json
+{
+  "message": "Job description stored successfully.",
+  "jd_name": "Senior Python Developer",
+  "extracted_skills": 15,
+  "required_experience": 5.0
+}
+```
+
+---
+
+#### `PUT /api/v1/nlp/jd/{jd_name}`
+
+Updates an existing Job Description by re-extracting all data from the new text provided.
+
+**Body (JSON):**
+```json
+{
+  "job_description": "Updated JD text with new requirements..."
+}
+```
+
+---
+
 #### `POST /api/v1/nlp/index/{project_id}`
 
-Parse → embed → store a file's chunks into ChromaDB. **This is the main indexing step.**
+Parse → embed → store a file's chunks into ChromaDB. Uses LLM for CV skill extraction if available, falling back to taxonomy.
 
 **Body (JSON):**
 ```json
@@ -263,15 +335,16 @@ Parse → embed → store a file's chunks into ChromaDB. **This is the main inde
 
 #### `POST /api/v1/nlp/match/{project_id}`
 
-Compares a Job Description against all indexed candidates in a project using a Hybrid Scoring Engine (60% Semantic Cosine Similarity + 40% Keyword Jaccard Index).
+Compares a Job Description against all indexed candidates in a project using a Hybrid Scoring Engine (35% Semantic, 35% Keyword, 30% Experience). You can pass either a raw `job_description` string OR a `jd_name` (to use pre-computed, stored JD data).
 
 **Body (JSON):**
 ```json
 {
-  "job_description": "Looking for a Python Developer with experience in FastAPI and Machine Learning...",
+  "jd_name": "Senior Python Developer",
   "top_k": 5
 }
 ```
+*(Alternatively, you can provide `"job_description"` instead of `"jd_name"`)*
 
 **Success Response:**
 ```json
@@ -400,17 +473,22 @@ Step 1: Upload Resumes
   POST /api/v1/data/upload/{project_id}
   → returns file_id (Candidate ID)
 
-Step 2: Index Resumes (Parse + Extract Skills + Embed + Store)
+Step 2: Index Resumes (Parse + LLM Extract Skills + Embed + Store)
   POST /api/v1/nlp/index/{project_id}
   body: { "file_id": "<returned file_id>" }
-  → skills extracted and vectors stored in ChromaDB
+  → skills extracted via LLM (or taxonomy) and vectors stored in ChromaDB
 
-Step 3: Match Job Description (ATS Scoring)
+Step 3: Save Job Description (Extract + Embed + Store)
+  POST /api/v1/nlp/jd
+  body: { "jd_name": "My JD", "job_description": "We need..." }
+  → parses JD with LLM, extracts required experience, stores in local DB
+
+Step 4: Match ATS
   POST /api/v1/nlp/match/{project_id}
-  body: { "job_description": "Your JD here...", "top_k": 5 }
-  → returns ranked candidates with hybrid scores (Semantic + Keyword) and missing skills
+  body: { "jd_name": "My JD", "top_k": 5 }
+  → returns ranked candidates with hybrid scores (Semantic + Keyword + Experience) and missing skills
 
-Step 4 (optional): Cleanup
+Step 5 (optional): Cleanup
   DELETE /api/v1/nlp/{project_id}/file/{file_id}   ← single candidate
   DELETE /api/v1/nlp/{project_id}                   ← entire job/project
 ```
@@ -425,15 +503,20 @@ curl -X POST "http://localhost:8000/api/v1/data/upload/${PROJECT_ID}" \
   -F "file=@/path/to/resume.pdf"
 # → { "file_id": "abc123_resume.pdf" }
 
-# Step 2 — Index
+# Step 2 — Index CV
 curl -X POST "http://localhost:8000/api/v1/nlp/index/${PROJECT_ID}" \
   -H "Content-Type: application/json" \
   -d '{"file_id": "abc123_resume.pdf"}'
 
-# Step 3 — Match ATS
+# Step 3 — Save JD
+curl -X POST "http://localhost:8000/api/v1/nlp/jd" \
+  -H "Content-Type: application/json" \
+  -d '{"jd_name": "Backend Dev", "job_description": "We need Python and ML experts with 3 years exp."}'
+
+# Step 4 — Match ATS using saved JD
 curl -X POST "http://localhost:8000/api/v1/nlp/match/${PROJECT_ID}" \
   -H "Content-Type: application/json" \
-  -d '{"job_description": "We need Python and ML experts.", "top_k": 3}'
+  -d '{"jd_name": "Backend Dev", "top_k": 3}'
 ```
 
 ---
@@ -443,10 +526,13 @@ curl -X POST "http://localhost:8000/api/v1/nlp/match/${PROJECT_ID}" \
 | Component | File | Role |
 |-----------|------|------|
 | `ProcessController` | `controllers/ProcessController.py` | Reads PDF/DOCX, extracts text, handles raw data ingestion. |
-| `ExtractionController` (TBD) | `controllers/ExtractionController.py` | Uses spaCy and a `skills-taxonomy.json` for Named Entity Recognition (NER) to extract skills. |
+| `ExtractionController` | `controllers/ExtractionController.py` | Uses spaCy and a `skills-taxonomy.json` for Named Entity Recognition (NER) to extract skills (fallback). |
+| `LLMExtractionController` | `controllers/LLMExtractionController.py` | Uses an LLM (OpenAI-compatible) to intelligently extract skills from JDs and CVs without being constrained by a taxonomy. |
+| `ExperienceController` | `controllers/ExperienceController.py` | Calculates required years of experience from JDs and candidate experience from resumes. |
+| `JDController` | `controllers/JDController.py` | Manages persistent storage of JDs (text, embeddings, skills) in a local JSON database. |
 | `EmbeddingController` | `controllers/EmbeddingController.py` | Loads `all-MiniLM-L6-v2` as a singleton; returns L2-normalised 384-dim vectors. |
 | `VectorDBController` | `controllers/VectorDBController.py` | Wraps ChromaDB persistent client; stores candidate vectors and metadata (extracted skills). |
-| `MatchController` (TBD) | `controllers/MatchController.py` | Implements the Hybrid Ranking Engine: calculates Semantic Score (Cosine) and Keyword Score (Jaccard). |
+| `MatchController` | `controllers/MatchController.py` | Implements the Hybrid Ranking Engine: calculates Semantic Score, Keyword Score, and Experience Score. |
 | `DataController` | `controllers/DataController.py` | Validates MIME type & size; generates collision-free file paths. |
 | `Settings` | `helpers/config.py` | `pydantic-settings` singleton loaded from `.env` |
 

@@ -14,7 +14,8 @@ from .EmbeddingController import EmbeddingController
 from .ExtractionController import ExtractionController
 from .ExperienceController import ExperienceController
 from .LLMExtractionController import LLMExtractionController
-from typing import List, Dict, Any
+from .JDController import JDController
+from typing import List, Dict, Any, Tuple
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -33,26 +34,48 @@ class MatchController:
         self.extraction = ExtractionController()
         self.experience = ExperienceController()
         self.llm_extraction = LLMExtractionController()
+        self.jd_controller = JDController()
         
-    def match_candidates(self, job_description: str, project_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def match_candidates(self, project_id: str, job_description: str = None, jd_name: str = None, top_k: int = 5) -> Tuple[List[Dict[str, Any]], List[str]]:
         # Type: Main function
         """
         Matches a job description against candidates and ranks them.
         Uses LLM to extract JD skills if available, otherwise falls back to taxonomy.
+        If jd_name is provided, uses precomputed data from JDController.
         """
-        # 1. Extract JD skills — prefer LLM (catches ALL skills), fallback to taxonomy
-        if self.llm_extraction.is_available:
-            jd_skills = set(self.llm_extraction.extract_skills_from_jd(job_description))
-            logger.info(f"[MatchController] LLM extracted {len(jd_skills)} JD skills: {jd_skills}")
-        else:
-            jd_skills = set(self.extraction.extract_skills(job_description))
-            logger.info(f"[MatchController] Taxonomy extracted {len(jd_skills)} JD skills (LLM unavailable)")
+        jd_skills = set()
+        required_exp = 0.0
+        jd_embedding = None
 
-        jd_embedding = self.embedding.embed_text(job_description)
-        required_exp = self.experience.extract_required_experience(job_description)
+        if jd_name:
+            # Load precomputed data
+            stored_jd = self.jd_controller.get_jd(jd_name)
+            if stored_jd:
+                jd_skills = set(stored_jd.get("skills", []))
+                required_exp = stored_jd.get("required_experience", 0.0)
+                jd_embedding = stored_jd.get("embedding")
+                logger.info(f"[MatchController] Loaded JD '{jd_name}' with {len(jd_skills)} skills")
+            else:
+                logger.warning(f"[MatchController] JD '{jd_name}' not found, falling back to on-the-fly extraction")
+
+        if jd_embedding is None or len(jd_embedding) == 0:
+            # Fallback to on-the-fly extraction if not stored or no jd_name
+            if not job_description:
+                return [], []
+            
+            # 1. Extract JD skills — prefer LLM (catches ALL skills), fallback to taxonomy
+            if self.llm_extraction.is_available:
+                jd_skills = set(self.llm_extraction.extract_skills_from_jd(job_description))
+                logger.info(f"[MatchController] LLM extracted {len(jd_skills)} JD skills on the fly")
+            else:
+                jd_skills = set(self.extraction.extract_skills(job_description))
+                logger.info(f"[MatchController] Taxonomy extracted {len(jd_skills)} JD skills (LLM unavailable)")
+
+            jd_embedding = self.embedding.embed_text(job_description)
+            required_exp = self.experience.extract_required_experience(job_description)
         
-        if not jd_embedding:
-            return []
+        if jd_embedding is None or len(jd_embedding) == 0:
+            return [], []
             
         # 2. Retrieve candidates semantically (broad search)
         results = self.vector_db.search(

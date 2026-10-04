@@ -2,9 +2,9 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 import logging
 
-from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController
+from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController, JDController
 from models import ResponseSignal
-from .schemes.nlp import NLPIndexRequest, NLPMatchRequest
+from .schemes.nlp import NLPIndexRequest, NLPMatchRequest, NLPJDStoreRequest, NLPdeleteRequest, NLPJDUpdateRequest
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -13,6 +13,29 @@ nlp_router = APIRouter(
     tags=["api_v1", "nlp"],
 )
 
+@nlp_router.get("/files")
+async def list_indexed_files():
+    # Type: Main function
+    """
+    Returns a list of all file_id and project_id combinations stored in the VectorDB.
+    """
+    try:
+        vectordb_controller = VectorDBController()
+        files = vectordb_controller.get_all_indexed_files()
+        
+        return JSONResponse(
+            content={
+                "message": "Files retrieved successfully.",
+                "total": len(files),
+                "files": files
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error listing files: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."}
+        )
 
 @nlp_router.post("/index/{project_id}")
 async def index_file(project_id: str, request: NLPIndexRequest):
@@ -126,24 +149,206 @@ async def index_file(project_id: str, request: NLPIndexRequest):
         )
 
 
+@nlp_router.get("/jd")
+async def list_job_descriptions():
+    # Type: Main function
+    """
+    Returns a list of all Job Description names stored in the database.
+    """
+    try:
+        jd_controller = JDController()
+        jds = jd_controller.list_jds()
+        
+        return JSONResponse(
+            content={
+                "message": "Job descriptions retrieved successfully.",
+                "total": len(jds),
+                "jds": jds
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error listing JDs: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."}
+        )
+
+
+@nlp_router.post("/jd")
+async def store_job_description(request: NLPJDStoreRequest):
+    # Type: Main function
+    """
+    Extracts skills, embeddings, and required experience from a Job Description,
+    and stores them in both JSON (metadata) and ChromaDB (chunks + vectors).
+    """
+    try:
+        jd_name = request.jd_name.strip()
+        job_description = request.job_description.strip()
+        
+        if not jd_name or not job_description:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"message": "jd_name and job_description are required."}
+            )
+
+        # 1. Extract skills via LLM (fallback to taxonomy)
+        llm_extraction = LLMExtractionController()
+        extraction = ExtractionController()
+        
+        if llm_extraction.is_available:
+            skills = llm_extraction.extract_skills_from_jd(job_description)
+        else:
+            skills = extraction.extract_skills(job_description)
+            
+        # 2. Extract required experience
+        experience_controller = ExperienceController()
+        required_exp = experience_controller.extract_required_experience(job_description)
+        
+        # 3. Create embedding for the full JD
+        embedding_controller = EmbeddingController()
+        embedding = embedding_controller.embed_text(job_description)
+        
+        if not embedding:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"message": "Failed to create JD embedding."}
+            )
+
+        # 4. Store in ChromaDB
+        jd_controller = JDController()
+        success = jd_controller.store_jd(
+            jd_name=jd_name,
+            job_description=job_description,
+            skills=skills,
+            required_exp=required_exp,
+            embedding=embedding
+        )
+        
+        if success:
+            return JSONResponse(
+                content={
+                    "message": "Job description stored successfully.",
+                    "jd_name": jd_name,
+                    "extracted_skills": skills,
+                    "skills_count": len(skills),
+                    "required_experience": required_exp
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"message": "Failed to store job description to database."}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error storing JD: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."}
+        )
+
+
+@nlp_router.put("/jd")
+async def update_job_description( request: NLPJDUpdateRequest):
+    # Type: Main function
+    """
+    Updates an existing Job Description.
+    Re-extracts skills, embeddings, and required experience based on the new text.
+    """
+    try:
+        jd_name = request.jd_name.strip()
+        job_description = request.job_description.strip()
+        
+        jd_controller = JDController()
+        
+        # Check if it exists first
+        if not jd_controller.get_jd(jd_name):
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": f"Job description '{jd_name}' not found."}
+            )
+
+        if not job_description:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"message": "job_description is required."}
+            )
+
+        # 1. Re-extract skills via LLM (fallback to taxonomy)
+        llm_extraction = LLMExtractionController()
+        extraction = ExtractionController()
+        
+        if llm_extraction.is_available:
+            skills = llm_extraction.extract_skills_from_jd(job_description)
+        else:
+            skills = extraction.extract_skills(job_description)
+            
+        # 2. Re-extract required experience
+        experience_controller = ExperienceController()
+        required_exp = experience_controller.extract_required_experience(job_description)
+        
+        # 3. Re-create embedding
+        embedding_controller = EmbeddingController()
+        embedding = embedding_controller.embed_text(job_description)
+        
+        if not embedding:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"message": "Failed to create JD embedding."}
+            )
+
+        # 4. Store natively in ChromaDB (upsert automatically overwrites)
+        success = jd_controller.store_jd(
+            jd_name=jd_name,
+            job_description=job_description,
+            skills=skills,
+            required_exp=required_exp,
+            embedding=embedding
+        )
+        
+        if success:
+            return JSONResponse(
+                content={
+                    "message": "Job description updated successfully.",
+                    "jd_name": jd_name,
+                    "extracted_skills": skills,
+                    "skills_count": len(skills),
+                    "required_experience": required_exp
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"message": "Failed to update job description in database."}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error updating JD: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."}
+        )
+
+
 @nlp_router.post("/match/{project_id}")
 async def match_resumes(project_id: str, request: NLPMatchRequest):
     # Type: Main function
     """
-    Match Job Description against all indexed candidates in a project using 
-    Hybrid ATS Scoring Engine (60% Semantic / 40% Keyword).
+    Match Job Description against all indexed candidates in a project.
+    Can accept a raw job_description string OR a pre-stored jd_name.
     """
     try:
-        if not request.job_description or not request.job_description.strip():
+        if not request.job_description and not request.jd_name:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"signal":ResponseSignal.EMPTY_JOB_DESCRIPTION.value}
+                content={"signal": ResponseSignal.EMPTY_JOB_DESCRIPTION.value}
             )
 
         match_controller = MatchController()
-        results, jd_skills= match_controller.match_candidates(
+        results, jd_skills = match_controller.match_candidates(
             job_description=request.job_description,
             project_id=project_id,
+            jd_name=request.jd_name,
             top_k=request.top_k
         )
 
@@ -164,8 +369,8 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
         )
 
 
-@nlp_router.delete("/{project_id}/file/{file_id}")
-async def delete_file_index(project_id: str, file_id: str):
+@nlp_router.delete("/delete/file")
+async def delete_file_index(request: NLPdeleteRequest):
     # Type: Main function
     """
     Delete indexed chunks for a specific file in a project.
@@ -173,8 +378,8 @@ async def delete_file_index(project_id: str, file_id: str):
     try:
         vectordb_controller = VectorDBController()
         success = vectordb_controller.delete_by_file(
-            project_id=project_id,
-            file_id=file_id
+            project_id=request.project_id,
+            file_id=request.file_id
         )
 
         if not success:
@@ -186,8 +391,8 @@ async def delete_file_index(project_id: str, file_id: str):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_DELETE_SUCCESS.value,
-                "project_id": project_id,
-                "file_id": file_id
+                "project_id": request.project_id,
+                "file_id": request.file_id
             }
         )
     except Exception as e:
@@ -196,7 +401,6 @@ async def delete_file_index(project_id: str, file_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"signal": ResponseSignal.VECTORDB_DELETE_FAILED.value}
         )
-
 
 @nlp_router.delete("/{project_id}")
 async def delete_project_index(project_id: str):
