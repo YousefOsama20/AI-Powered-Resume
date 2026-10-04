@@ -1,26 +1,53 @@
+"""
+MatchController
+───────────────
+Implements the Hybrid Ranking Engine:
+Semantic Score (Cosine) + Keyword Score (Jaccard) + Experience Score.
+
+Uses LLM-based extraction for JD skills (catches ALL skills),
+and taxonomy-based extraction for CV skills (stored during indexing).
+"""
+
+import logging
 from .VectorDBController import VectorDBController
 from .EmbeddingController import EmbeddingController
 from .ExtractionController import ExtractionController
 from .ExperienceController import ExperienceController
+from .LLMExtractionController import LLMExtractionController
 from typing import List, Dict, Any
+
+logger = logging.getLogger("uvicorn.error")
+
 
 class MatchController:
     """
     Implements the Hybrid Ranking Engine: 
     Calculates Semantic Score (Cosine), Keyword Score (Jaccard),
-    and Experience Score with a 55% Semantic / 35% Keyword / 10% Experience weighting.
+    and Experience Score with a 35% Semantic / 35% Keyword / 30% Experience weighting.
     """
     def __init__(self):
         # Type: Sub-function
+        """Initializes MatchController and sub-controllers."""
         self.vector_db = VectorDBController()
         self.embedding = EmbeddingController()
         self.extraction = ExtractionController()
         self.experience = ExperienceController()
+        self.llm_extraction = LLMExtractionController()
         
     def match_candidates(self, job_description: str, project_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
         # Type: Main function
-        # 1. Extract JD requirements and create embedding
-        jd_skills = set(self.extraction.extract_skills(job_description))
+        """
+        Matches a job description against candidates and ranks them.
+        Uses LLM to extract JD skills if available, otherwise falls back to taxonomy.
+        """
+        # 1. Extract JD skills — prefer LLM (catches ALL skills), fallback to taxonomy
+        if self.llm_extraction.is_available:
+            jd_skills = set(self.llm_extraction.extract_skills_from_jd(job_description))
+            logger.info(f"[MatchController] LLM extracted {len(jd_skills)} JD skills: {jd_skills}")
+        else:
+            jd_skills = set(self.extraction.extract_skills(job_description))
+            logger.info(f"[MatchController] Taxonomy extracted {len(jd_skills)} JD skills (LLM unavailable)")
+
         jd_embedding = self.embedding.embed_text(job_description)
         required_exp = self.experience.extract_required_experience(job_description)
         
@@ -93,11 +120,9 @@ class MatchController:
                 jaccard = len(intersection) / len(union) if union else 0.0
 
             # Experience score
-            # Re-extract from all combined Experience chunks to properly handle multi-chunk overlapping dates
             combined_exp_text = "\n\n".join(data["experience_chunks_text"])
             candidate_exp = self.experience.extract_candidate_experience(combined_exp_text)
             
-            # If no dates found in combined text, use the fallback (which might contain a pre-computed value)
             if candidate_exp == 0.0:
                 candidate_exp = data["experience_years_fallback"]
                 
@@ -123,6 +148,7 @@ class MatchController:
                 "required_experience": required_exp,
                 "candidate_experience": candidate_exp,
                 "experience_gap": experience_gap,
+                "jd_skills": list(jd_skills),
                 "extracted_skills": list(candidate_skills),
                 "missing_skills": missing_skills
             })
