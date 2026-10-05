@@ -4,6 +4,7 @@ uvicorn[standard]
 python-multipart
 python-dotenv
 pydantic-settings
+pydantic[email]
 aiofiles
 langchain
 langchain-community
