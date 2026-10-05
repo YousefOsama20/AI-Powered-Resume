@@ -1,8 +1,11 @@
 """
 LLMExtractionController
 ───────────────────────
-Uses an LLM (via OpenAI-compatible API) to extract ALL skills from a
-Job Description — including skills not in the predefined taxonomy.
+Uses an LLM (via OpenAI-compatible API) to extract skills from
+Job Descriptions and CVs.
+
+For JDs: Returns classified skills {"essential": [...], "elective": [...]}
+For CVs: Returns a flat list of skills [...]
 
 Prompts are loaded from the templates system (locales/en/skill_extraction.py)
 following the same pattern as MiniRAG's TemplateParser.
@@ -11,7 +14,7 @@ following the same pattern as MiniRAG's TemplateParser.
 import json
 import re
 import logging
-from typing import List, Optional
+from typing import List, Dict, Optional, Union
 
 from .BaseController import BaseController
 from stores.llm import LLMProvider
@@ -22,8 +25,9 @@ logger = logging.getLogger("uvicorn.error")
 
 class LLMExtractionController(BaseController):
     """
-    Extracts skills from job descriptions using an LLM.
-    Falls back to taxonomy-based extraction if LLM is unavailable.
+    Extracts skills from job descriptions and CVs using an LLM.
+    JD extraction returns classified skills (essential/elective).
+    CV extraction returns a flat skill list.
     """
 
     _llm_provider: Optional[LLMProvider] = None
@@ -61,10 +65,23 @@ class LLMExtractionController(BaseController):
             except Exception as e:
                 logger.error(f"[LLMExtractionController] Failed to initialize LLM: {e}")
 
+    def _normalize_skill_list(self, raw_list: list) -> List[str]:
+        # Type: Sub-function
+        """Normalizes a list of skills: lowercase, strip, deduplicate, remove empties."""
+        seen = set()
+        result = []
+        for s in raw_list:
+            if isinstance(s, str):
+                normalized = s.strip().lower()
+                if normalized and normalized not in seen:
+                    seen.add(normalized)
+                    result.append(normalized)
+        return result
+
     def _parse_skills_response(self, response: str) -> List[str]:
         # Type: Sub-function
         """
-        Parses the LLM response into a clean list of skills.
+        Parses the LLM response into a clean list of skills (for CVs).
         Handles cases where LLM wraps JSON in markdown code blocks.
         """
         if not response:
@@ -79,16 +96,7 @@ class LLMExtractionController(BaseController):
         try:
             skills = json.loads(cleaned)
             if isinstance(skills, list):
-                # Normalize: lowercase, strip, deduplicate, remove empties
-                seen = set()
-                result = []
-                for s in skills:
-                    if isinstance(s, str):
-                        normalized = s.strip().lower()
-                        if normalized and normalized not in seen:
-                            seen.add(normalized)
-                            result.append(normalized)
-                return result
+                return self._normalize_skill_list(skills)
         except json.JSONDecodeError:
             logger.warning(f"[LLMExtractionController] Failed to parse JSON from LLM response: {cleaned[:200]}")
 
@@ -101,25 +109,58 @@ class LLMExtractionController(BaseController):
 
         return list(set(fallback_skills))
 
-    def extract_skills_from_jd(self, job_description: str) -> List[str]:
+    def _parse_classified_skills_response(self, response: str) -> Dict[str, List[str]]:
+        # Type: Sub-function
+        """
+        Parses the LLM response into classified skills (for JDs).
+        Expected format: {"essential": [...], "elective": [...]}
+        Falls back to putting all skills in "essential" if parsing fails.
+        """
+        if not response:
+            return {"essential": [], "elective": []}
+
+        # Strip markdown code blocks
+        cleaned = response.strip()
+        cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        cleaned = cleaned.strip()
+
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                essential = self._normalize_skill_list(parsed.get("essential", []))
+                elective = self._normalize_skill_list(parsed.get("elective", []))
+                logger.info(f"[LLMExtractionController] Classified: {len(essential)} essential, {len(elective)} elective")
+                return {"essential": essential, "elective": elective}
+            elif isinstance(parsed, list):
+                # LLM returned a flat list instead of classified — treat all as essential
+                logger.warning("[LLMExtractionController] LLM returned flat list instead of classified. Treating all as essential.")
+                return {"essential": self._normalize_skill_list(parsed), "elective": []}
+        except json.JSONDecodeError:
+            logger.warning(f"[LLMExtractionController] Failed to parse classified JSON: {cleaned[:200]}")
+
+        # Last resort fallback: try to extract as flat list and put all in essential
+        fallback = self._parse_skills_response(response)
+        return {"essential": fallback, "elective": []}
+
+    def extract_skills_from_jd(self, job_description: str) -> Dict[str, List[str]]:
         # Type: Main function
         """
-        Extracts all skills from a job description using the LLM.
-        Prompts are loaded from templates/locales/{lang}/skill_extraction.py.
+        Extracts and classifies skills from a job description using the LLM.
 
         Args:
             job_description: The full job description text.
 
         Returns:
-            List of extracted skill strings (lowercased).
-            Returns empty list if LLM is not available.
+            Dictionary with "essential" and "elective" skill lists.
+            Returns {"essential": [], "elective": []} if LLM is not available.
         """
         if not job_description or not job_description.strip():
-            return []
+            return {"essential": [], "elective": []}
 
         if self._llm_provider is None:
             logger.warning("[LLMExtractionController] LLM not available. Returning empty skills.")
-            return []
+            return {"essential": [], "elective": []}
 
         # Load prompts from template system
         system_prompt = self.template_parser.get("skill_extraction", "system_prompt")
@@ -130,22 +171,23 @@ class LLMExtractionController(BaseController):
 
         if not system_prompt or not user_prompt:
             logger.error("[LLMExtractionController] Failed to load prompt templates.")
-            return []
+            return {"essential": [], "elective": []}
 
         response = self._llm_provider.generate(
             system_prompt=system_prompt,
             user_prompt=user_prompt
         )
 
-        skills = self._parse_skills_response(response)
-        logger.info(f"[LLMExtractionController] Extracted {len(skills)} skills from JD via LLM")
-        return skills
+        classified = self._parse_classified_skills_response(response)
+        total = len(classified["essential"]) + len(classified["elective"])
+        logger.info(f"[LLMExtractionController] Extracted {total} skills from JD via LLM ({len(classified['essential'])} essential, {len(classified['elective'])} elective)")
+        return classified
 
     def extract_skills_from_cv(self, resume_text: str) -> List[str]:
         # Type: Main function
         """
         Extracts all skills from a CV/resume using the LLM.
-        Prompts are loaded from templates/locales/{lang}/skill_extraction.py.
+        Returns a flat list (no classification needed for CVs).
 
         Args:
             resume_text: The full resume text (all sections combined).
