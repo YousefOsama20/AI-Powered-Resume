@@ -158,9 +158,9 @@ class MatchController:
 
             # Combined keyword score
             if essential_skills and elective_skills:
-                # If they don't have ALL essential skills, ignore elective skills
-                if essential_score < 1.0:
-                    keyword_score = essential_score * 0.75
+                # If they have less than 50% of essential skills, ignore elective — all weight to essential
+                if essential_score < 0.5:
+                    keyword_score = essential_score
                 else:
                     keyword_score = (essential_score * 0.75) + (elective_score * 0.25)
             elif essential_skills:
