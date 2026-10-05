@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     APP_NAME: str
     APP_VERSION: str
 
+    # ── Database ───────────────────────────────────────────────────────────────
+    DATABASE_URL: str
+
     # ── File Upload Settings ───────────────────────────────────────────────────
     FILE_ALLOWED_TYPES: List[str]
     FILE_MAX_SIZE: int

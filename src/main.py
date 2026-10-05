@@ -13,6 +13,14 @@ async def lifespan(app: FastAPI):
     app.generation_client = llm_provider_factory.create(provider=settings.GENERATION_BACKEND)
     app.generation_client.set_generation_model(model_id=settings.GENERATION_MODEL_ID)
     
+    # Initialize Database Tables
+    try:
+        from stores.db.database import engine
+        from models.sql_models import Base
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Failed to initialize database: {e}")
+    
     yield
     
     if hasattr(app, 'db_engine'):

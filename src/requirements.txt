@@ -19,3 +19,12 @@ qdrant-client
 openai
 cohere
 google-genai
+
+# Phase 1 - SQL Database
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Phase 2 - Authentication
+python-jose[cryptography]
+passlib[bcrypt]
