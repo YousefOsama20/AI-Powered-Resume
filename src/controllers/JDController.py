@@ -2,11 +2,11 @@
 JDController
 ────────────
 Handles storing and retrieving Job Descriptions directly in ChromaDB.
-Eliminates the need for a separate JSON file.
+Stores classified skills (essential/elective) as separate metadata fields.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from .BaseController import BaseController
 from .VectorDBController import VectorDBController
@@ -22,14 +22,20 @@ class JDController(BaseController):
         super().__init__()
         self.vector_db = VectorDBController()
 
-    def store_jd(self, jd_name: str, job_description: str, skills: list, required_exp: float, embedding: list) -> bool:
+    def store_jd(self, jd_name: str, job_description: str,
+                 skills: Dict[str, List[str]], required_exp: float,
+                 embedding: list) -> bool:
         # Type: Main function
         """
         Stores a Job Description entirely in ChromaDB as a single document.
+        Skills are stored as classified: essential_skills and elective_skills.
         Uses upsert to automatically overwrite if the jd_name already exists.
         """
         try:
             collection = self.vector_db._get_collection(JD_COLLECTION)
+            
+            essential = skills.get("essential", [])
+            elective = skills.get("elective", [])
             
             # Upsert into ChromaDB
             collection.upsert(
@@ -37,12 +43,13 @@ class JDController(BaseController):
                 documents=[job_description],
                 embeddings=[embedding],
                 metadatas=[{
-                    "skills": ",".join(skills),
+                    "essential_skills": ",".join(essential),
+                    "elective_skills": ",".join(elective),
                     "required_experience": float(required_exp)
                 }]
             )
             
-            logger.info(f"[JDController] Successfully stored JD in ChromaDB: {jd_name}")
+            logger.info(f"[JDController] Stored JD in ChromaDB: {jd_name} ({len(essential)} essential, {len(elective)} elective)")
             return True
         except Exception as e:
             logger.error(f"[JDController] Error storing JD in ChromaDB: {e}")
@@ -52,6 +59,7 @@ class JDController(BaseController):
         # Type: Main function
         """
         Retrieves a stored Job Description and its metadata from ChromaDB.
+        Returns skills as classified dict: {"essential": [...], "elective": [...]}.
         """
         try:
             collection = self.vector_db._get_collection(JD_COLLECTION)
@@ -64,7 +72,8 @@ class JDController(BaseController):
                 return None
                 
             meta = results["metadatas"][0]
-            skills_str = meta.get("skills", "")
+            essential_str = meta.get("essential_skills", "")
+            elective_str = meta.get("elective_skills", "")
             
             emb = results["embeddings"][0]
             if hasattr(emb, "tolist"):
@@ -72,7 +81,10 @@ class JDController(BaseController):
                 
             return {
                 "job_description": results["documents"][0],
-                "skills": skills_str.split(",") if skills_str else [],
+                "skills": {
+                    "essential": essential_str.split(",") if essential_str else [],
+                    "elective": elective_str.split(",") if elective_str else []
+                },
                 "required_experience": meta.get("required_experience", 0.0),
                 "embedding": emb
             }
@@ -83,11 +95,10 @@ class JDController(BaseController):
     def list_jds(self) -> list:
         # Type: Main function
         """
-        Returns a list of all stored JD names with their skills and experience from ChromaDB.
+        Returns a list of all stored JD names with their classified skills and experience.
         """
         try:
             collection = self.vector_db._get_collection(JD_COLLECTION)
-            # Only need metadata to list them
             results = collection.get(include=["metadatas"])
             
             jds = []
@@ -95,14 +106,19 @@ class JDController(BaseController):
                 for i in range(len(results["ids"])):
                     jd_name = results["ids"][i]
                     meta = results["metadatas"][i]
-                    skills_str = meta.get("skills", "")
-                    skills_list = skills_str.split(",") if skills_str else []
+                    essential_str = meta.get("essential_skills", "")
+                    elective_str = meta.get("elective_skills", "")
+                    essential_list = essential_str.split(",") if essential_str else []
+                    elective_list = elective_str.split(",") if elective_str else []
                     
                     jds.append({
                         "jd_name": jd_name,
-                        "skills_count": len(skills_list),
+                        "essential_skills_count": len(essential_list),
+                        "elective_skills_count": len(elective_list),
+                        "total_skills_count": len(essential_list) + len(elective_list),
                         "required_experience": meta.get("required_experience", 0.0),
-                        "skills": skills_list
+                        "essential_skills": essential_list,
+                        "elective_skills": elective_list
                     })
             return jds
         except Exception as e:

@@ -191,14 +191,16 @@ async def store_job_description(request: NLPJDStoreRequest):
                 content={"message": "jd_name and job_description are required."}
             )
 
-        # 1. Extract skills via LLM (fallback to taxonomy)
+        # 1. Extract skills via LLM (classified) or taxonomy (fallback)
         llm_extraction = LLMExtractionController()
         extraction = ExtractionController()
         
         if llm_extraction.is_available:
             skills = llm_extraction.extract_skills_from_jd(job_description)
         else:
-            skills = extraction.extract_skills(job_description)
+            # Taxonomy fallback: all skills go to "essential"
+            flat_skills = extraction.extract_skills(job_description)
+            skills = {"essential": flat_skills, "elective": []}
             
         # 2. Extract required experience
         experience_controller = ExperienceController()
@@ -229,8 +231,11 @@ async def store_job_description(request: NLPJDStoreRequest):
                 content={
                     "message": "Job description stored successfully.",
                     "jd_name": jd_name,
-                    "extracted_skills": skills,
-                    "skills_count": len(skills),
+                    "essential_skills": skills["essential"],
+                    "elective_skills": skills["elective"],
+                    "essential_count": len(skills["essential"]),
+                    "elective_count": len(skills["elective"]),
+                    "total_skills": len(skills["essential"]) + len(skills["elective"]),
                     "required_experience": required_exp
                 }
             )
@@ -274,14 +279,15 @@ async def update_job_description( request: NLPJDUpdateRequest):
                 content={"message": "job_description is required."}
             )
 
-        # 1. Re-extract skills via LLM (fallback to taxonomy)
+        # 1. Re-extract skills via LLM (classified) or taxonomy (fallback)
         llm_extraction = LLMExtractionController()
         extraction = ExtractionController()
         
         if llm_extraction.is_available:
             skills = llm_extraction.extract_skills_from_jd(job_description)
         else:
-            skills = extraction.extract_skills(job_description)
+            flat_skills = extraction.extract_skills(job_description)
+            skills = {"essential": flat_skills, "elective": []}
             
         # 2. Re-extract required experience
         experience_controller = ExperienceController()
@@ -311,8 +317,11 @@ async def update_job_description( request: NLPJDUpdateRequest):
                 content={
                     "message": "Job description updated successfully.",
                     "jd_name": jd_name,
-                    "extracted_skills": skills,
-                    "skills_count": len(skills),
+                    "essential_skills": skills["essential"],
+                    "elective_skills": skills["elective"],
+                    "essential_count": len(skills["essential"]),
+                    "elective_count": len(skills["elective"]),
+                    "total_skills": len(skills["essential"]) + len(skills["elective"]),
                     "required_experience": required_exp
                 }
             )

@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from routes import base, data, nlp
+from routes import base, data, nlp, auth
 from stores.llm.LLMProviderFactory import LLMProviderFactory
 from helpers.config import get_settings
 
@@ -12,6 +12,14 @@ async def lifespan(app: FastAPI):
     # generation client
     app.generation_client = llm_provider_factory.create(provider=settings.GENERATION_BACKEND)
     app.generation_client.set_generation_model(model_id=settings.GENERATION_MODEL_ID)
+    
+    # Initialize Database Tables
+    try:
+        from stores.db.database import engine
+        from models.sql_models import Base
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Failed to initialize database: {e}")
     
     yield
     
@@ -25,6 +33,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(nlp.nlp_router)
+app.include_router(auth.auth_router)
 
 
 
