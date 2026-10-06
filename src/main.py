@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     try:
         from stores.db.database import engine
         from models.sql_models import Base
-        Base.metadata.create_all(bind=engine)
+        # Base.metadata.create_all(bind=engine) # Now managed by Alembic
     except Exception as e:
         print(f"Failed to initialize database: {e}")
     
