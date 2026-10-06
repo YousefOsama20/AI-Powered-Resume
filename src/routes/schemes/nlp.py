@@ -25,5 +25,4 @@ class NLPMatchRequest(BaseModel):
     top_k: Optional[int] = 5
 
 class NLPdeleteRequest(BaseModel):
-    project_id: str
     file_id: str
