@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from routes import base, data, nlp, auth
+from routes import base, data, nlp, auth, requests
 from stores.llm.LLMProviderFactory import LLMProviderFactory
 from helpers.config import get_settings
 
@@ -34,7 +34,7 @@ app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(nlp.nlp_router)
 app.include_router(auth.auth_router)
-
+app.include_router(requests.request_router)
 
 
 if __name__ == "__main__":
