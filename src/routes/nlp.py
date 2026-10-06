@@ -1,10 +1,12 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Depends
 from fastapi.responses import JSONResponse
 import logging
 
 from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController, JDController
 from models import ResponseSignal
 from .schemes.nlp import NLPIndexRequest, NLPMatchRequest, NLPJDStoreRequest, NLPdeleteRequest, NLPJDUpdateRequest
+from routes.deps import get_current_customer, get_current_company
+from models.sql_models import User
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -37,16 +39,18 @@ async def list_indexed_files():
             content={"message": "Internal server error."}
         )
 
-@nlp_router.post("/index/{project_id}")
-async def index_file(project_id: str, request: NLPIndexRequest):
+@nlp_router.post("/index")
+async def index_file(request: NLPIndexRequest, current_user: User = Depends(get_current_customer)):
     # Type: Main function
     """
-    Parse a file, embed its chunks, and store them in the Vector DB.
+    Parse a file for a customer, embed its chunks, and store them in the Vector DB.
     Uses LLM for skill extraction if available, falls back to taxonomy.
     """
     try:
+        customer_id = current_user.customer_profile.id
+        
         # 1. Parse and chunk the file
-        process_controller = ProcessController(project_id=project_id)
+        process_controller = ProcessController(customer_id=customer_id)
         file_content = process_controller.get_file_content(file_id=request.file_id)
         
         if not file_content:
@@ -133,7 +137,7 @@ async def index_file(project_id: str, request: NLPIndexRequest):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_INDEX_SUCCESS.value,
-                "project_id": project_id,
+                "customer_id": customer_id,
                 "file_id": request.file_id,
                 "indexed_chunks": len(chunks),
                 "collection": request.collection_name or vectordb_controller.default_collection,
@@ -339,11 +343,11 @@ async def update_job_description( request: NLPJDUpdateRequest):
         )
 
 
-@nlp_router.post("/match/{project_id}")
-async def match_resumes(project_id: str, request: NLPMatchRequest):
+@nlp_router.post("/match")
+async def match_resumes(request: NLPMatchRequest, current_user: User = Depends(get_current_company)):
     # Type: Main function
     """
-    Match Job Description against all indexed candidates in a project.
+    Match Job Description against all candidates in the global candidate pool.
     Can accept a raw job_description string OR a pre-stored jd_name.
     """
     try:
@@ -355,8 +359,8 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
 
         match_controller = MatchController()
         results, jd_skills = match_controller.match_candidates(
+            customer_id=None, # Global search
             job_description=request.job_description,
-            project_id=project_id,
             jd_name=request.jd_name,
             top_k=request.top_k
         )
@@ -364,7 +368,6 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.MATCH_SUCCESS.value,
-                "project_id": project_id,
                 "jd_skills": jd_skills,
                 "results": results
             }
@@ -379,15 +382,16 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
 
 
 @nlp_router.delete("/delete/file")
-async def delete_file_index(request: NLPdeleteRequest):
+async def delete_file_index(request: NLPdeleteRequest, current_user: User = Depends(get_current_customer)):
     # Type: Main function
     """
-    Delete indexed chunks for a specific file in a project.
+    Delete indexed chunks for a specific file belonging to the logged-in customer.
     """
     try:
+        customer_id = current_user.customer_profile.id
         vectordb_controller = VectorDBController()
         success = vectordb_controller.delete_by_file(
-            project_id=request.project_id,
+            customer_id=customer_id,
             file_id=request.file_id
         )
 
@@ -400,7 +404,7 @@ async def delete_file_index(request: NLPdeleteRequest):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_DELETE_SUCCESS.value,
-                "project_id": request.project_id,
+                "customer_id": customer_id,
                 "file_id": request.file_id
             }
         )
@@ -411,15 +415,16 @@ async def delete_file_index(request: NLPdeleteRequest):
             content={"signal": ResponseSignal.VECTORDB_DELETE_FAILED.value}
         )
 
-@nlp_router.delete("/{project_id}")
-async def delete_project_index(project_id: str):
+@nlp_router.delete("/delete/customer")
+async def delete_customer_index(current_user: User = Depends(get_current_customer)):
     # Type: Main function
     """
-    Delete all indexed chunks for an entire project.
+    Delete all indexed chunks for the logged-in customer.
     """
     try:
+        customer_id = current_user.customer_profile.id
         vectordb_controller = VectorDBController()
-        success = vectordb_controller.delete_by_project(project_id=project_id)
+        success = vectordb_controller.delete_by_customer(customer_id=customer_id)
 
         if not success:
             return JSONResponse(
@@ -430,11 +435,11 @@ async def delete_project_index(project_id: str):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_DELETE_SUCCESS.value,
-                "project_id": project_id
+                "customer_id": customer_id
             }
         )
     except Exception as e:
-        logger.error(f"Error deleting project from VectorDB: {e}")
+        logger.error(f"Error deleting customer data from VectorDB: {e}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"signal": ResponseSignal.VECTORDB_DELETE_FAILED.value}
