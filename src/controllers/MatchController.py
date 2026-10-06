@@ -103,6 +103,7 @@ class MatchController:
                 
             if file_id not in candidates:
                 candidates[file_id] = {
+                    "customer_id": res["metadata"].get("customer_id", ""),
                     "semantic_scores": [],
                     "skills": set(),
                     "experience_chunks_text": [],
@@ -195,6 +196,7 @@ class MatchController:
             
             ranked_candidates.append({
                 "candidate_id": file_id,
+                "customer_id": data["customer_id"],
                 "match_score": round(hybrid_score * 100, 2),
                 "semantic_score": round(avg_semantic * 100, 2),
                 "keyword_score": round(keyword_score * 100, 2),

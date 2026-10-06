@@ -7,7 +7,7 @@ from controllers import ProcessController, EmbeddingController, VectorDBControll
 from models import ResponseSignal
 from .schemes.nlp import NLPIndexRequest, NLPMatchRequest, NLPJDStoreRequest, NLPdeleteRequest, NLPJDUpdateRequest
 from routes.deps import get_current_customer, get_current_company
-from models.sql_models import User, JobDescription
+from models.sql_models import User, JobDescription, CustomerProfile
 from stores.db.database import get_db
 
 logger = logging.getLogger('uvicorn.error')
@@ -401,32 +401,59 @@ async def delete_job_description(jd_name: str, current_user: User = Depends(get_
 
 
 @nlp_router.post("/match")
-async def match_resumes(request: NLPMatchRequest, current_user: User = Depends(get_current_company)):
+async def match_resumes(request: NLPMatchRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
     # Type: Main function
     """
     Match Job Description against all candidates in the global candidate pool.
     Can accept a raw job_description string OR a pre-stored jd_name.
+    Enriches results with candidate profile data from PostgreSQL.
     """
     try:
+        company_id = current_user.company_profile.id
+
         if not request.job_description and not request.jd_name:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={"signal": ResponseSignal.EMPTY_JOB_DESCRIPTION.value}
             )
 
+        # If using a stored JD, verify ownership
+        if request.jd_name:
+            owned_jd = db.query(JobDescription).filter_by(
+                company_id=company_id, jd_name=request.jd_name
+            ).first()
+            if not owned_jd:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={"message": f"Job description '{request.jd_name}' not found or you don't have permission."}
+                )
+
         match_controller = MatchController()
         results, jd_skills = match_controller.match_candidates(
-            customer_id=None, # Global search
+            customer_id=None,  # Global search
             job_description=request.job_description,
             jd_name=request.jd_name,
             top_k=request.top_k
         )
 
+        # Enrich results with CustomerProfile data from PostgreSQL
+        enriched_results = []
+        for result in results:
+            cust_id = result.get("customer_id", "")
+            profile = db.query(CustomerProfile).filter_by(id=cust_id).first() if cust_id else None
+            
+            result["candidate_name"] = profile.name if profile else "Unknown"
+            result["candidate_location"] = profile.location if profile else None
+            result["has_accepted_request"] = False  # Will be used in Phase 7
+            enriched_results.append(result)
+
         return JSONResponse(
             content={
                 "signal": ResponseSignal.MATCH_SUCCESS.value,
+                "company_id": company_id,
                 "jd_skills": jd_skills,
-                "results": results
+                "total_matches": len(enriched_results),
+                "results": enriched_results
             }
         )
 
