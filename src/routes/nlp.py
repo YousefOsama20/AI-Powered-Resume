@@ -1,12 +1,14 @@
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import logging
+from sqlalchemy.orm import Session
 
 from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController, JDController
 from models import ResponseSignal
 from .schemes.nlp import NLPIndexRequest, NLPMatchRequest, NLPJDStoreRequest, NLPdeleteRequest, NLPJDUpdateRequest
 from routes.deps import get_current_customer, get_current_company
-from models.sql_models import User
+from models.sql_models import User, JobDescription
+from stores.db.database import get_db
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -154,14 +156,15 @@ async def index_file(request: NLPIndexRequest, current_user: User = Depends(get_
 
 
 @nlp_router.get("/jd")
-async def list_job_descriptions():
+async def list_job_descriptions(current_user: User = Depends(get_current_company)):
     # Type: Main function
     """
-    Returns a list of all Job Description names stored in the database.
+    Returns a list of all Job Description names owned by the logged-in company.
     """
     try:
+        company_id = current_user.company_profile.id
         jd_controller = JDController()
-        jds = jd_controller.list_jds()
+        jds = jd_controller.list_jds(company_id=company_id)
         
         return JSONResponse(
             content={
@@ -179,15 +182,17 @@ async def list_job_descriptions():
 
 
 @nlp_router.post("/jd")
-async def store_job_description(request: NLPJDStoreRequest):
+async def store_job_description(request: NLPJDStoreRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
     # Type: Main function
     """
     Extracts skills, embeddings, and required experience from a Job Description,
     and stores them in both JSON (metadata) and ChromaDB (chunks + vectors).
+    Also persists JD ownership to the SQL database.
     """
     try:
         jd_name = request.jd_name.strip()
         job_description = request.job_description.strip()
+        company_id = current_user.company_profile.id
         
         if not jd_name or not job_description:
             return JSONResponse(
@@ -224,6 +229,7 @@ async def store_job_description(request: NLPJDStoreRequest):
         jd_controller = JDController()
         success = jd_controller.store_jd(
             jd_name=jd_name,
+            company_id=company_id,
             job_description=job_description,
             skills=skills,
             required_exp=required_exp,
@@ -231,10 +237,18 @@ async def store_job_description(request: NLPJDStoreRequest):
         )
         
         if success:
+            # 5. Store ownership in SQL Database
+            existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+            if not existing_jd:
+                new_jd = JobDescription(company_id=company_id, jd_name=jd_name)
+                db.add(new_jd)
+                db.commit()
+
             return JSONResponse(
                 content={
                     "message": "Job description stored successfully.",
                     "jd_name": jd_name,
+                    "company_id": company_id,
                     "essential_skills": skills["essential"],
                     "elective_skills": skills["elective"],
                     "essential_count": len(skills["essential"]),
@@ -258,23 +272,25 @@ async def store_job_description(request: NLPJDStoreRequest):
 
 
 @nlp_router.put("/jd")
-async def update_job_description( request: NLPJDUpdateRequest):
+async def update_job_description(request: NLPJDUpdateRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
     # Type: Main function
     """
-    Updates an existing Job Description.
+    Updates an existing Job Description owned by the logged-in company.
     Re-extracts skills, embeddings, and required experience based on the new text.
     """
     try:
         jd_name = request.jd_name.strip()
         job_description = request.job_description.strip()
+        company_id = current_user.company_profile.id
         
         jd_controller = JDController()
         
-        # Check if it exists first
-        if not jd_controller.get_jd(jd_name):
+        # Check ownership in SQL database first
+        existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+        if not existing_jd:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"message": f"Job description '{jd_name}' not found."}
+                content={"message": f"Job description '{jd_name}' not found or you don't have permission."}
             )
 
         if not job_description:
@@ -310,6 +326,7 @@ async def update_job_description( request: NLPJDUpdateRequest):
         # 4. Store natively in ChromaDB (upsert automatically overwrites)
         success = jd_controller.store_jd(
             jd_name=jd_name,
+            company_id=company_id,
             job_description=job_description,
             skills=skills,
             required_exp=required_exp,
@@ -321,6 +338,7 @@ async def update_job_description( request: NLPJDUpdateRequest):
                 content={
                     "message": "Job description updated successfully.",
                     "jd_name": jd_name,
+                    "company_id": company_id,
                     "essential_skills": skills["essential"],
                     "elective_skills": skills["elective"],
                     "essential_count": len(skills["essential"]),
@@ -337,6 +355,45 @@ async def update_job_description( request: NLPJDUpdateRequest):
             
     except Exception as e:
         logger.error(f"Error updating JD: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."}
+        )
+
+
+@nlp_router.delete("/jd/{jd_name}")
+async def delete_job_description(jd_name: str, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    # Type: Main function
+    """
+    Deletes a Job Description owned by the logged-in company from both SQL and ChromaDB.
+    """
+    try:
+        company_id = current_user.company_profile.id
+        
+        # Check ownership in SQL
+        existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+        if not existing_jd:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": f"Job description '{jd_name}' not found or you don't have permission."}
+            )
+            
+        # Delete from SQL
+        db.delete(existing_jd)
+        db.commit()
+        
+        # Delete from ChromaDB
+        jd_controller = JDController()
+        jd_controller.delete_jd(jd_name, company_id=company_id)
+        
+        return JSONResponse(
+            content={
+                "message": "Job description deleted successfully.",
+                "jd_name": jd_name
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error deleting JD: {e}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": "Internal server error."}

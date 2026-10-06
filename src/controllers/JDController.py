@@ -22,7 +22,7 @@ class JDController(BaseController):
         super().__init__()
         self.vector_db = VectorDBController()
 
-    def store_jd(self, jd_name: str, job_description: str,
+    def store_jd(self, jd_name: str, company_id: str, job_description: str,
                  skills: Dict[str, List[str]], required_exp: float,
                  embedding: list) -> bool:
         # Type: Main function
@@ -43,6 +43,7 @@ class JDController(BaseController):
                 documents=[job_description],
                 embeddings=[embedding],
                 metadatas=[{
+                    "company_id": company_id,
                     "essential_skills": ",".join(essential),
                     "elective_skills": ",".join(elective),
                     "required_experience": float(required_exp)
@@ -55,7 +56,7 @@ class JDController(BaseController):
             logger.error(f"[JDController] Error storing JD in ChromaDB: {e}")
             return False
 
-    def get_jd(self, jd_name: str) -> Optional[Dict[str, Any]]:
+    def get_jd(self, jd_name: str, company_id: str = None) -> Optional[Dict[str, Any]]:
         # Type: Main function
         """
         Retrieves a stored Job Description and its metadata from ChromaDB.
@@ -63,8 +64,14 @@ class JDController(BaseController):
         """
         try:
             collection = self.vector_db._get_collection(JD_COLLECTION)
+            
+            where_clause = None
+            if company_id:
+                where_clause = {"company_id": company_id}
+                
             results = collection.get(
                 ids=[jd_name],
+                where=where_clause,
                 include=["embeddings", "metadatas", "documents"]
             )
             
@@ -92,14 +99,23 @@ class JDController(BaseController):
             logger.error(f"[JDController] Error retrieving JD from ChromaDB: {e}")
             return None
 
-    def list_jds(self) -> list:
+    def list_jds(self, company_id: str = None) -> list:
         # Type: Main function
         """
         Returns a list of all stored JD names with their classified skills and experience.
+        Optionally filters by company_id.
         """
         try:
             collection = self.vector_db._get_collection(JD_COLLECTION)
-            results = collection.get(include=["metadatas"])
+            
+            where_clause = None
+            if company_id:
+                where_clause = {"company_id": company_id}
+                
+            results = collection.get(
+                where=where_clause,
+                include=["metadatas"]
+            )
             
             jds = []
             if results and results["ids"]:
@@ -113,6 +129,7 @@ class JDController(BaseController):
                     
                     jds.append({
                         "jd_name": jd_name,
+                        "company_id": meta.get("company_id", ""),
                         "essential_skills_count": len(essential_list),
                         "elective_skills_count": len(elective_list),
                         "total_skills_count": len(essential_list) + len(elective_list),
@@ -125,12 +142,20 @@ class JDController(BaseController):
             logger.error(f"[JDController] Error listing JDs from ChromaDB: {e}")
             return []
 
-    def delete_jd(self, jd_name: str) -> bool:
+    def delete_jd(self, jd_name: str, company_id: str = None) -> bool:
         # Type: Main function
-        """Deletes a JD from ChromaDB."""
+        """Deletes a JD from ChromaDB. Optionally verifies company ownership."""
         try:
             collection = self.vector_db._get_collection(JD_COLLECTION)
-            collection.delete(ids=[jd_name])
+            
+            where_clause = None
+            if company_id:
+                where_clause = {"company_id": company_id}
+                
+            collection.delete(
+                ids=[jd_name],
+                where=where_clause
+            )
             logger.info(f"[JDController] Deleted JD from ChromaDB: {jd_name}")
             return True
         except Exception as e:
