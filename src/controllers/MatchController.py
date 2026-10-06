@@ -36,12 +36,13 @@ class MatchController:
         self.llm_extraction = LLMExtractionController()
         self.jd_controller = JDController()
         
-    def match_candidates(self, project_id: str, job_description: str = None, 
+    def match_candidates(self, customer_id: str = None, job_description: str = None, 
                                jd_name: str = None, top_k: int = 5) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
         # Type: Main function
         """
         Matches a job description against candidates and ranks them.
         Skills are classified into essential and elective for weighted scoring.
+        Searches the Global Candidate Pool unless a specific customer_id is provided.
         """
         essential_skills = set()
         elective_skills = set()
@@ -86,7 +87,7 @@ class MatchController:
         # 2. Retrieve candidates semantically (broad search)
         results = self.vector_db.search(
             query_embedding=jd_embedding,
-            project_id=project_id,
+            customer_id=customer_id,
             n_results=100  # fetch broad pool to rerank
         )
         

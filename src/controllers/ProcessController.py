@@ -12,11 +12,11 @@ from models.enums import ProcessingEnum, ResumeSectionEnum, SECTION_PATTERNS
 
 class ProcessController(BaseController):
 
-    def __init__(self, project_id: str):
+    def __init__(self, customer_id: str):
         # Type: Sub-function
         super().__init__()
-        self.project_id = project_id
-        self.project_path = ProjectController().get_project_path(project_id=project_id)
+        self.customer_id = customer_id
+        self.customer_path = ProjectController().get_customer_path(customer_id=customer_id)
 
     def _get_file_extension(self, file_id: str) -> str:
         # Type: Sub-function
@@ -25,7 +25,7 @@ class ProcessController(BaseController):
     def _get_file_loader(self, file_id: str) -> list:
         # Type: Sub-function
         file_ext = self._get_file_extension(file_id=file_id)
-        file_path = os.path.join(self.project_path, file_id)
+        file_path = os.path.join(self.customer_path, file_id)
 
         if not os.path.exists(file_path):
             return []
@@ -140,7 +140,7 @@ class ProcessController(BaseController):
                 formatted_content = f"[{section_name}]\n{sub_chunk_text}"
 
                 metadata = {
-                    "project_id": str(self.project_id),
+                    "customer_id": str(self.customer_id),
                     "file_id": file_id,
                     "section": section_name,
                     "section_chunk_index": sub_idx,
