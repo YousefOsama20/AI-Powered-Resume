@@ -10,7 +10,7 @@ from helpers.config import get_settings
 
 settings = get_settings()
 auth_router = APIRouter(
-    prefix="/api/v1/auth",
+    prefix="/auth",
     tags=["api_v1", "Authentication"]
 )
 

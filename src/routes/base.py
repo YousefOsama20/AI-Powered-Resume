@@ -3,7 +3,7 @@ import os
 from helpers.config import get_settings, Settings
 
 base_router = APIRouter(
-    prefix="/api/v1",
+    prefix="/welcome",
     tags=["api_v1"],
 )
 
