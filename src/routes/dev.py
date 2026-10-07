@@ -32,7 +32,7 @@ async def reset_database(db: Session = Depends(get_db)):
         try:
             client = VectorDBController().chroma_client
             client.delete_collection("candidates")
-            client.delete_collection("job_descriptions")
+            client.delete_collection("jds")
             logger.info("ChromaDB collections deleted.")
         except Exception as e:
             logger.warning(f"Error wiping ChromaDB (might already be empty): {e}")

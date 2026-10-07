@@ -242,7 +242,14 @@ async def store_job_description(request: NLPJDStoreRequest, current_user: User =
             # 5. Store ownership in SQL Database
             existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
             if not existing_jd:
-                new_jd = JobDescription(company_id=company_id, jd_name=jd_name)
+                new_jd = JobDescription(
+                    company_id=company_id, 
+                    jd_name=jd_name,
+                    is_public=request.is_public,
+                    location=request.location,
+                    job_type_id=request.job_type_id,
+                    job_function_id=request.job_function_id
+                )
                 db.add(new_jd)
                 db.commit()
 
@@ -533,3 +540,28 @@ async def delete_customer_index(current_user: User = Depends(get_current_custome
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"signal": ResponseSignal.VECTORDB_DELETE_FAILED.value}
         )
+
+@nlp_router.get("/recommend-jobs")
+async def recommend_jobs(
+    document_id: str = None,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
+    """Get recommended jobs based on candidate CV. | Target: Customer"""
+    try:
+        if not document_id:
+            from models.sql_models import CandidateDocument
+            doc = db.query(CandidateDocument).filter_by(customer_id=current_user.customer_profile.id, is_primary=1).first()
+            if not doc:
+                doc = db.query(CandidateDocument).filter_by(customer_id=current_user.customer_profile.id).first()
+            if doc:
+                document_id = doc.id
+            else:
+                return JSONResponse(status_code=404, content={"message": "No CV found to match against."})
+                
+        match_controller = MatchController()
+        recommended = match_controller.recommend_jobs(db=db, document_id=document_id, top_k=5)
+        return JSONResponse(content={"recommended_jobs": recommended})
+    except Exception as e:
+        import traceback; logger.error(f"Error recommending jobs: {e}\n{traceback.format_exc()}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})

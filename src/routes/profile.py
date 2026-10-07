@@ -8,7 +8,7 @@ import logging
 from stores.db.database import get_db
 from models.sql_models import User, CustomerProfile, CompanyProfile, JobType, JobFunction, customer_job_type, customer_job_function
 from routes.deps import get_current_customer, get_current_company
-from .schemes.profile import CustomerProfileUpdate, company_name
+
 logger = logging.getLogger('uvicorn.error')
 
 profile_router = APIRouter(
@@ -16,12 +16,22 @@ profile_router = APIRouter(
     tags=["api_v1", "profile"],
 )
 
+class CustomerProfileUpdate(BaseModel):
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    job_type_ids: Optional[List[str]] = None
+    job_function_ids: Optional[List[str]] = None
+
+class CompanyProfileUpdate(BaseModel):
+    company_name: Optional[str] = None
+    description: Optional[str] = None
+
 @profile_router.put("/customer")
 async def update_customer_profile(
     payload: CustomerProfileUpdate,
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
-    ):
+):
     """Update candidate profile (phone, location, job types, job functions). | Target: Customer"""
     try:
         profile = current_user.customer_profile
@@ -58,7 +68,7 @@ async def update_company_profile(
     payload: CompanyProfileUpdate,
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
-    ):
+):
     """Update company profile (name, description). | Target: Company"""
     try:
         profile = current_user.company_profile

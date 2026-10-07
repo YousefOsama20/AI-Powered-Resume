@@ -1,23 +1,27 @@
 from pydantic import BaseModel
-from typing import Optional
-
+from typing import Optional, List
 
 class NLPIndexRequest(BaseModel):
     file_id: str
-    chunk_size: Optional[int] = 500
-    overlap_size: Optional[int] = 50
-    collection_name: Optional[str] = None
-
+    chunk_size: Optional[int] = 1000
+    overlap_size: Optional[int] = 200
+    collection_name: Optional[str] = "candidates"
 
 class NLPJDStoreRequest(BaseModel):
     jd_name: str
     job_description: str
-
+    is_public: Optional[int] = 0
+    location: Optional[str] = None
+    job_type_id: Optional[str] = None
+    job_function_id: Optional[str] = None
 
 class NLPJDUpdateRequest(BaseModel):
     jd_name: str
     job_description: str
-
+    is_public: Optional[int] = 0
+    location: Optional[str] = None
+    job_type_id: Optional[str] = None
+    job_function_id: Optional[str] = None
 
 class NLPMatchRequest(BaseModel):
     job_description: Optional[str] = None
