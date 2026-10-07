@@ -10,13 +10,13 @@ from helpers.config import get_settings
 
 settings = get_settings()
 auth_router = APIRouter(
-    prefix="/api/v1/auth",
+    prefix="/auth",
     tags=["api_v1", "Authentication"]
 )
 
 @auth_router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
-    # Check if user exists
+    """Register a new user (Customer or Company) and create their profile. | Target: Both"""
     existing_user = db.query(User).filter(User.email == request.email).first()
     if existing_user:
         raise HTTPException(
@@ -51,6 +51,7 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
 
 @auth_router.post("/login", response_model=TokenResponse)
 async def login(request: UserLoginRequest, db: Session = Depends(get_db)):
+    """Authenticate user with email/password and return a JWT token. | Target: Both"""
     user = db.query(User).filter(User.email == request.email).first()
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(

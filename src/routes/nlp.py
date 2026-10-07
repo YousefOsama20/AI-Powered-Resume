@@ -1,15 +1,19 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import logging
+from sqlalchemy.orm import Session
 
 from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController, JDController
 from models import ResponseSignal
 from .schemes.nlp import NLPIndexRequest, NLPMatchRequest, NLPJDStoreRequest, NLPdeleteRequest, NLPJDUpdateRequest
+from routes.deps import get_current_customer, get_current_company
+from models.sql_models import User, JobDescription, CustomerProfile
+from stores.db.database import get_db
 
 logger = logging.getLogger('uvicorn.error')
 
 nlp_router = APIRouter(
-    prefix="/api/v1/nlp",
+    prefix="/nlp",
     tags=["api_v1", "nlp"],
 )
 
@@ -37,16 +41,18 @@ async def list_indexed_files():
             content={"message": "Internal server error."}
         )
 
-@nlp_router.post("/index/{project_id}")
-async def index_file(project_id: str, request: NLPIndexRequest):
+@nlp_router.post("/index")
+async def index_file(request: NLPIndexRequest, current_user: User = Depends(get_current_customer)):
     # Type: Main function
     """
-    Parse a file, embed its chunks, and store them in the Vector DB.
+    Parse a file for a customer, embed its chunks, and store them in the Vector DB.
     Uses LLM for skill extraction if available, falls back to taxonomy.
     """
     try:
+        customer_id = current_user.customer_profile.id
+        
         # 1. Parse and chunk the file
-        process_controller = ProcessController(project_id=project_id)
+        process_controller = ProcessController(customer_id=customer_id)
         file_content = process_controller.get_file_content(file_id=request.file_id)
         
         if not file_content:
@@ -133,7 +139,7 @@ async def index_file(project_id: str, request: NLPIndexRequest):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_INDEX_SUCCESS.value,
-                "project_id": project_id,
+                "customer_id": customer_id,
                 "file_id": request.file_id,
                 "indexed_chunks": len(chunks),
                 "collection": request.collection_name or vectordb_controller.default_collection,
@@ -150,14 +156,16 @@ async def index_file(project_id: str, request: NLPIndexRequest):
 
 
 @nlp_router.get("/jd")
-async def list_job_descriptions():
+async def list_job_descriptions(current_user: User = Depends(get_current_company)):
+    """List all Job Descriptions owned by the logged-in company. | Target: Company"""
     # Type: Main function
     """
-    Returns a list of all Job Description names stored in the database.
+    Returns a list of all Job Description names owned by the logged-in company.
     """
     try:
+        company_id = current_user.company_profile.id
         jd_controller = JDController()
-        jds = jd_controller.list_jds()
+        jds = jd_controller.list_jds(company_id=company_id)
         
         return JSONResponse(
             content={
@@ -175,15 +183,18 @@ async def list_job_descriptions():
 
 
 @nlp_router.post("/jd")
-async def store_job_description(request: NLPJDStoreRequest):
+async def store_job_description(request: NLPJDStoreRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Create a new Job Description, extract skills via LLM, and embed into ChromaDB. | Target: Company"""
     # Type: Main function
     """
     Extracts skills, embeddings, and required experience from a Job Description,
     and stores them in both JSON (metadata) and ChromaDB (chunks + vectors).
+    Also persists JD ownership to the SQL database.
     """
     try:
         jd_name = request.jd_name.strip()
         job_description = request.job_description.strip()
+        company_id = current_user.company_profile.id
         
         if not jd_name or not job_description:
             return JSONResponse(
@@ -220,6 +231,7 @@ async def store_job_description(request: NLPJDStoreRequest):
         jd_controller = JDController()
         success = jd_controller.store_jd(
             jd_name=jd_name,
+            company_id=company_id,
             job_description=job_description,
             skills=skills,
             required_exp=required_exp,
@@ -227,10 +239,25 @@ async def store_job_description(request: NLPJDStoreRequest):
         )
         
         if success:
+            # 5. Store ownership in SQL Database
+            existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+            if not existing_jd:
+                new_jd = JobDescription(
+                    company_id=company_id, 
+                    jd_name=jd_name,
+                    is_public=request.is_public,
+                    location=request.location,
+                    job_type_id=request.job_type_id,
+                    job_function_id=request.job_function_id
+                )
+                db.add(new_jd)
+                db.commit()
+
             return JSONResponse(
                 content={
                     "message": "Job description stored successfully.",
                     "jd_name": jd_name,
+                    "company_id": company_id,
                     "essential_skills": skills["essential"],
                     "elective_skills": skills["elective"],
                     "essential_count": len(skills["essential"]),
@@ -254,23 +281,26 @@ async def store_job_description(request: NLPJDStoreRequest):
 
 
 @nlp_router.put("/jd")
-async def update_job_description( request: NLPJDUpdateRequest):
+async def update_job_description(request: NLPJDUpdateRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Update an existing JD, re-extract skills and re-embed. | Target: Company"""
     # Type: Main function
     """
-    Updates an existing Job Description.
+    Updates an existing Job Description owned by the logged-in company.
     Re-extracts skills, embeddings, and required experience based on the new text.
     """
     try:
         jd_name = request.jd_name.strip()
         job_description = request.job_description.strip()
+        company_id = current_user.company_profile.id
         
         jd_controller = JDController()
         
-        # Check if it exists first
-        if not jd_controller.get_jd(jd_name):
+        # Check ownership in SQL database first
+        existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+        if not existing_jd:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"message": f"Job description '{jd_name}' not found."}
+                content={"message": f"Job description '{jd_name}' not found or you don't have permission."}
             )
 
         if not job_description:
@@ -306,6 +336,7 @@ async def update_job_description( request: NLPJDUpdateRequest):
         # 4. Store natively in ChromaDB (upsert automatically overwrites)
         success = jd_controller.store_jd(
             jd_name=jd_name,
+            company_id=company_id,
             job_description=job_description,
             skills=skills,
             required_exp=required_exp,
@@ -317,6 +348,7 @@ async def update_job_description( request: NLPJDUpdateRequest):
                 content={
                     "message": "Job description updated successfully.",
                     "jd_name": jd_name,
+                    "company_id": company_id,
                     "essential_skills": skills["essential"],
                     "elective_skills": skills["elective"],
                     "essential_count": len(skills["essential"]),
@@ -339,34 +371,101 @@ async def update_job_description( request: NLPJDUpdateRequest):
         )
 
 
-@nlp_router.post("/match/{project_id}")
-async def match_resumes(project_id: str, request: NLPMatchRequest):
+@nlp_router.delete("/jd/{jd_name}")
+async def delete_job_description(jd_name: str, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Delete a JD from both PostgreSQL and ChromaDB. | Target: Company"""
     # Type: Main function
     """
-    Match Job Description against all indexed candidates in a project.
-    Can accept a raw job_description string OR a pre-stored jd_name.
+    Deletes a Job Description owned by the logged-in company from both SQL and ChromaDB.
     """
     try:
+        company_id = current_user.company_profile.id
+        
+        # Check ownership in SQL
+        existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+        if not existing_jd:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"message": f"Job description '{jd_name}' not found or you don't have permission."}
+            )
+            
+        # Delete from SQL
+        db.delete(existing_jd)
+        db.commit()
+        
+        # Delete from ChromaDB
+        jd_controller = JDController()
+        jd_controller.delete_jd(jd_name, company_id=company_id)
+        
+        return JSONResponse(
+            content={
+                "message": "Job description deleted successfully.",
+                "jd_name": jd_name
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error deleting JD: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error."}
+        )
+
+
+@nlp_router.post("/match")
+async def match_resumes(request: NLPMatchRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Run hybrid AI matching (Semantic + Keywords + Experience) against candidate pool. | Target: Company"""
+    # Type: Main function
+    """
+    Match Job Description against all candidates in the global candidate pool.
+    Can accept a raw job_description string OR a pre-stored jd_name.
+    Enriches results with candidate profile data from PostgreSQL.
+    """
+    try:
+        company_id = current_user.company_profile.id
+
         if not request.job_description and not request.jd_name:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={"signal": ResponseSignal.EMPTY_JOB_DESCRIPTION.value}
             )
 
+        # If using a stored JD, verify ownership
+        if request.jd_name:
+            owned_jd = db.query(JobDescription).filter_by(
+                company_id=company_id, jd_name=request.jd_name
+            ).first()
+            if not owned_jd:
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={"message": f"Job description '{request.jd_name}' not found or you don't have permission."}
+                )
+
         match_controller = MatchController()
         results, jd_skills = match_controller.match_candidates(
+            customer_id=None,  # Global search
             job_description=request.job_description,
-            project_id=project_id,
             jd_name=request.jd_name,
             top_k=request.top_k
         )
 
+        # Enrich results with CustomerProfile data from PostgreSQL
+        enriched_results = []
+        for result in results:
+            cust_id = result.get("customer_id", "")
+            profile = db.query(CustomerProfile).filter_by(id=cust_id).first() if cust_id else None
+            
+            result["candidate_name"] = profile.name if profile else "Unknown"
+            result["candidate_location"] = profile.location if profile else None
+            result["has_accepted_request"] = False  # Will be used in Phase 7
+            enriched_results.append(result)
+
         return JSONResponse(
             content={
                 "signal": ResponseSignal.MATCH_SUCCESS.value,
-                "project_id": project_id,
+                "company_id": company_id,
                 "jd_skills": jd_skills,
-                "results": results
+                "total_matches": len(enriched_results),
+                "results": enriched_results
             }
         )
 
@@ -379,15 +478,16 @@ async def match_resumes(project_id: str, request: NLPMatchRequest):
 
 
 @nlp_router.delete("/delete/file")
-async def delete_file_index(request: NLPdeleteRequest):
+async def delete_file_index(request: NLPdeleteRequest, current_user: User = Depends(get_current_customer)):
     # Type: Main function
     """
-    Delete indexed chunks for a specific file in a project.
+    Delete indexed chunks for a specific file belonging to the logged-in customer.
     """
     try:
+        customer_id = current_user.customer_profile.id
         vectordb_controller = VectorDBController()
         success = vectordb_controller.delete_by_file(
-            project_id=request.project_id,
+            customer_id=customer_id,
             file_id=request.file_id
         )
 
@@ -400,7 +500,7 @@ async def delete_file_index(request: NLPdeleteRequest):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_DELETE_SUCCESS.value,
-                "project_id": request.project_id,
+                "customer_id": customer_id,
                 "file_id": request.file_id
             }
         )
@@ -411,15 +511,16 @@ async def delete_file_index(request: NLPdeleteRequest):
             content={"signal": ResponseSignal.VECTORDB_DELETE_FAILED.value}
         )
 
-@nlp_router.delete("/{project_id}")
-async def delete_project_index(project_id: str):
+@nlp_router.delete("/delete/customer")
+async def delete_customer_index(current_user: User = Depends(get_current_customer)):
     # Type: Main function
     """
-    Delete all indexed chunks for an entire project.
+    Delete all indexed chunks for the logged-in customer.
     """
     try:
+        customer_id = current_user.customer_profile.id
         vectordb_controller = VectorDBController()
-        success = vectordb_controller.delete_by_project(project_id=project_id)
+        success = vectordb_controller.delete_by_customer(customer_id=customer_id)
 
         if not success:
             return JSONResponse(
@@ -430,12 +531,37 @@ async def delete_project_index(project_id: str):
         return JSONResponse(
             content={
                 "signal": ResponseSignal.VECTORDB_DELETE_SUCCESS.value,
-                "project_id": project_id
+                "customer_id": customer_id
             }
         )
     except Exception as e:
-        logger.error(f"Error deleting project from VectorDB: {e}")
+        logger.error(f"Error deleting customer data from VectorDB: {e}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"signal": ResponseSignal.VECTORDB_DELETE_FAILED.value}
         )
+
+@nlp_router.get("/recommend-jobs")
+async def recommend_jobs(
+    document_id: str = None,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
+    """Get recommended jobs based on candidate CV. | Target: Customer"""
+    try:
+        if not document_id:
+            from models.sql_models import CandidateDocument
+            doc = db.query(CandidateDocument).filter_by(customer_id=current_user.customer_profile.id, is_primary=1).first()
+            if not doc:
+                doc = db.query(CandidateDocument).filter_by(customer_id=current_user.customer_profile.id).first()
+            if doc:
+                document_id = doc.id
+            else:
+                return JSONResponse(status_code=404, content={"message": "No CV found to match against."})
+                
+        match_controller = MatchController()
+        recommended = match_controller.recommend_jobs(db=db, document_id=document_id, top_k=5)
+        return JSONResponse(content={"recommended_jobs": recommended})
+    except Exception as e:
+        import traceback; logger.error(f"Error recommending jobs: {e}\n{traceback.format_exc()}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})

@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from routes import base, data, nlp, auth
+from routes import base, data, nlp, auth, ats, profile, dev
 from stores.llm.LLMProviderFactory import LLMProviderFactory
 from helpers.config import get_settings
 
@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     try:
         from stores.db.database import engine
         from models.sql_models import Base
-        Base.metadata.create_all(bind=engine)
+        # Base.metadata.create_all(bind=engine) # Now managed by Alembic
     except Exception as e:
         print(f"Failed to initialize database: {e}")
     
@@ -34,7 +34,9 @@ app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(nlp.nlp_router)
 app.include_router(auth.auth_router)
-
+app.include_router(ats.ats_router)
+app.include_router(profile.profile_router)
+app.include_router(dev.dev_router)
 
 
 if __name__ == "__main__":

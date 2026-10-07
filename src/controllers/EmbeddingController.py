@@ -27,6 +27,7 @@ class EmbeddingController(BaseController):
     _model: SentenceTransformer | None = None
 
     def __init__(self):
+        # Initialize the embedding controller with lazy model loading. | Internal
         # Type: Sub-function
         super().__init__()
         self._ensure_model_loaded()
@@ -36,6 +37,7 @@ class EmbeddingController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _ensure_model_loaded(self) -> None:
+        # Lazy-load the SentenceTransformer model on first use. | Internal
         # Type: Sub-function
         """Load the sentence-transformer model once and cache it at class level."""
         if EmbeddingController._model is None:
@@ -46,6 +48,7 @@ class EmbeddingController(BaseController):
 
     @property
     def model(self) -> SentenceTransformer:
+        # Property: returns the loaded SentenceTransformer instance. | Internal
         # Type: Main function
         return EmbeddingController._model  # type: ignore[return-value]
 
@@ -54,6 +57,7 @@ class EmbeddingController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def embed_text(self, text: str) -> List[float]:
+        # Embed a single text string into a vector. | Internal (used by both Customer CV and Company JD)
         # Type: Main function
         """
         Embed a single text string.
@@ -67,6 +71,7 @@ class EmbeddingController(BaseController):
         return vector.tolist()
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        # Embed a single text string into a vector. | Internal (used by both Customer CV and Company JD)
         # Type: Main function
         """
         Embed a batch of text strings.

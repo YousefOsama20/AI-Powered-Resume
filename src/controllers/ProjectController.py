@@ -9,16 +9,17 @@ class ProjectController(BaseController):
         # Type: Sub-function
         super().__init__()
 
-    def get_project_path(self, project_id: str):
+    def get_customer_path(self, customer_id: str):
+        # Get or create the file storage directory for a customer. | Customer
         # Type: Main function
-        project_dir = os.path.join(
+        customer_dir = os.path.join(
             self.files_dir,
-            project_id
+            customer_id
         )
 
-        if not os.path.exists(project_dir):
-            os.makedirs(project_dir)
+        if not os.path.exists(customer_dir):
+            os.makedirs(customer_dir)
 
-        return project_dir
+        return customer_dir
 
     

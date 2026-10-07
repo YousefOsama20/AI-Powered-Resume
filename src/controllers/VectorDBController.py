@@ -33,6 +33,7 @@ class VectorDBController(BaseController):
         self.default_collection = self.app_settings.VECTOR_DB_COLLECTION
         
     def _get_collection(self, collection_name: str = None):
+        # Get or create a ChromaDB collection. | Internal
         # Type: Sub-function
         """Helper to get or create a collection."""
         name = collection_name or self.default_collection
@@ -74,34 +75,34 @@ class VectorDBController(BaseController):
             print(f"Error indexing to VectorDB: {e}")
             return False
 
-    def search(self, query_embedding: List[float], project_id: str,n_results: int = 5,
+    def search(self, query_embedding: List[float], customer_id: str = None, n_results: int = 5,
                     section_filter: str = None, collection_name: str = None) -> List[Dict[str, Any]]:
         # Type: Main function
         """
-        Perform a similarity search scoped to a specific project.
-        Can optionally filter by a specific resume section.
+        Perform a similarity search across the global candidate pool.
+        Optionally filter by a specific customer_id or resume section.
         """
         try:
             collection = self._get_collection(collection_name)
             
-            # Base where clause to scope to the specific project
-            where_clause = {"project_id": project_id}
+            where_clause = {}
+            conditions = []
             
-            # Optionally add section filter
+            if customer_id:
+                conditions.append({"customer_id": customer_id})
+                
             if section_filter and section_filter in [e.value for e in ResumeSectionEnum]:
-                # Chroma requires a $and if multiple conditions, but since we 
-                # have simple equality, we can use $and.
-                where_clause = {
-                    "$and": [
-                        {"project_id": project_id},
-                        {"section": section_filter}
-                    ]
-                }
+                conditions.append({"section": section_filter})
+                
+            if len(conditions) == 1:
+                where_clause = conditions[0]
+            elif len(conditions) > 1:
+                where_clause = {"$and": conditions}
             
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=n_results,
-                where=where_clause,
+                where=where_clause if where_clause else None,
                 include=["documents", "metadatas", "distances"]
             )
             
@@ -122,15 +123,16 @@ class VectorDBController(BaseController):
             print(f"Error searching VectorDB: {e}")
             return []
 
-    def delete_by_file(self, project_id: str, file_id: str, collection_name: str = None) -> bool:
+    def delete_by_file(self, customer_id: str, file_id: str, collection_name: str = None) -> bool:
+        # Delete all vectors for a specific file_id. | Customer (CV deletion)
         # Type: Main function
-        """Deletes all chunks associated with a specific file."""
+        """Deletes all chunks associated with a specific file for a customer."""
         try:
             collection = self._get_collection(collection_name)
             
             where_clause = {
                 "$and": [
-                    {"project_id": project_id},
+                    {"customer_id": customer_id},
                     {"file_id": file_id}
                 ]
             }
@@ -142,18 +144,20 @@ class VectorDBController(BaseController):
             print(f"Error deleting file from VectorDB: {e}")
             return False
 
-    def delete_by_project(self, project_id: str, collection_name: str = None) -> bool:
+    def delete_by_customer(self, customer_id: str, collection_name: str = None) -> bool:
+        # Delete all vectors for a customer. | Customer (account cleanup)
         # Type: Main function
-        """Deletes all chunks associated with a specific project."""
+        """Deletes all chunks associated with a specific customer."""
         try:
             collection = self._get_collection(collection_name)
-            collection.delete(where={"project_id": project_id})
+            collection.delete(where={"customer_id": customer_id})
             return True
         except Exception as e:
-            print(f"Error deleting project from VectorDB: {e}")
+            print(f"Error deleting customer from VectorDB: {e}")
             return False
 
     def get_collection_count(self, collection_name: str = None) -> int:
+        # Get total number of vectors in a collection. | Internal
         # Type: Main function
         """Returns total items in the collection."""
         try:
@@ -163,8 +167,9 @@ class VectorDBController(BaseController):
             return 0
 
     def get_all_indexed_files(self, collection_name: str = None) -> List[Dict[str, str]]:
+        # List all unique file_ids indexed in a collection. | Internal
         # Type: Main function
-        """Returns a list of all unique project_id and file_id combinations in the DB."""
+        """Returns a list of all unique customer_id and file_id combinations in the DB."""
         try:
             collection = self._get_collection(collection_name)
             
@@ -174,12 +179,12 @@ class VectorDBController(BaseController):
             unique_files = set()
             for meta in results.get("metadatas", []):
                 if meta:
-                    project_id = meta.get("project_id")
+                    customer_id = meta.get("customer_id")
                     file_id = meta.get("file_id")
-                    if project_id and file_id:
-                        unique_files.add((project_id, file_id))
+                    if customer_id and file_id:
+                        unique_files.add((customer_id, file_id))
                     
-            return [{"project_id": p_id, "file_id": f_id} for p_id, f_id in unique_files]
+            return [{"customer_id": c_id, "file_id": f_id} for c_id, f_id in unique_files]
         except Exception as e:
             print(f"Error fetching files from VectorDB: {e}")
             return []

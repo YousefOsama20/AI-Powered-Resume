@@ -11,11 +11,15 @@ class UserRole(str, enum.Enum):
     COMPANY = "COMPANY"
     ADMIN = "ADMIN"
 
-class RequestStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    ACCEPTED = "ACCEPTED"
-    REJECTED = "REJECTED"
-    CANCELLED = "CANCELLED"
+class PipelineStage(str, enum.Enum):
+    APPLIED = "APPLIED"           # Candidate applied to the job
+    CONTACTED = "CONTACTED"       # Company reached out to candidate (formerly PENDING)
+    CONSIDERED = "CONSIDERED"     # Candidate accepted contact, or Company moved them forward
+    INTERVIEWING = "INTERVIEWING" # Interview scheduled/happening
+    OFFER_SENT = "OFFER_SENT"     # Job offer sent
+    HIRED = "HIRED"               # Candidate accepted offer
+    REJECTED = "REJECTED"         # Candidate rejected by company or vice versa
+    CANCELLED = "CANCELLED"       # Application withdrawn
 
 # Many-to-Many association tables for Job Types and Functions
 customer_job_type = Table(
@@ -54,13 +58,25 @@ class CustomerProfile(Base):
     name = Column(String, nullable=False)
     phone = Column(String)
     location = Column(String)
-    cv_file_path = Column(String)
-    cv_vector_id = Column(String) # Maps to the Global Candidate Pool ID in ChromaDB
 
     user = relationship("User", back_populates="customer_profile")
     job_types = relationship("JobType", secondary=customer_job_type)
     job_functions = relationship("JobFunction", secondary=customer_job_function)
-    requests = relationship("CandidateRequest", back_populates="customer", foreign_keys="[CandidateRequest.customer_id]")
+    applications = relationship("JobApplication", back_populates="customer", foreign_keys="[JobApplication.customer_id]")
+    documents = relationship("CandidateDocument", back_populates="customer", cascade="all, delete-orphan")
+
+class CandidateDocument(Base):
+    __tablename__ = "candidate_documents"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id = Column(String, ForeignKey("customer_profiles.id"), nullable=False)
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    vector_id = Column(String, nullable=False) # Maps to ChromaDB ID
+    is_primary = Column(Integer, default=0) # 1 for True, 0 for False
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    customer = relationship("CustomerProfile", back_populates="documents")
+    applications = relationship("JobApplication", back_populates="document")
 
 class CompanyProfile(Base):
     __tablename__ = "company_profiles"
@@ -71,7 +87,7 @@ class CompanyProfile(Base):
     description = Column(Text)
 
     user = relationship("User", back_populates="company_profile")
-    requests = relationship("CandidateRequest", back_populates="company", foreign_keys="[CandidateRequest.company_id]")
+    applications = relationship("JobApplication", back_populates="company", foreign_keys="[JobApplication.company_id]")
     jds = relationship("JobDescription", back_populates="company", cascade="all, delete-orphan")
 
 class JobDescription(Base):
@@ -84,9 +100,18 @@ class JobDescription(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     company_id = Column(String, ForeignKey("company_profiles.id"), nullable=False)
     jd_name = Column(String, nullable=False) # Maps to the ChromaDB ID
+    is_public = Column(Integer, default=1) # 1 for public (candidates can apply), 0 for private
+    location = Column(String, nullable=True)
+    job_type_id = Column(String, ForeignKey("job_types.id"), nullable=True)
+    job_function_id = Column(String, ForeignKey("job_functions.id"), nullable=True)
+
+    job_type = relationship("JobType")
+    job_function = relationship("JobFunction")
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     company = relationship("CompanyProfile", back_populates="jds")
+    applications = relationship("JobApplication", back_populates="job_description", cascade="all, delete-orphan")
 
 class JobType(Base):
     __tablename__ = "job_types"
@@ -98,17 +123,25 @@ class JobFunction(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, unique=True, nullable=False) # e.g. "Software Engineering"
 
-class CandidateRequest(Base):
-    __tablename__ = "candidate_requests"
+class JobApplication(Base):
+    """
+    Represents an ATS Pipeline entity linking a Candidate to a Job Description.
+    """
+    __tablename__ = "job_applications"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     company_id = Column(String, ForeignKey("company_profiles.id"), nullable=False)
     customer_id = Column(String, ForeignKey("customer_profiles.id"), nullable=False)
     jd_id = Column(String, ForeignKey("job_descriptions.id"), nullable=False)
-    status = Column(Enum(RequestStatus), default=RequestStatus.PENDING)
+    document_id = Column(String, ForeignKey("candidate_documents.id"), nullable=True)
+    
+    stage = Column(Enum(PipelineStage), default=PipelineStage.APPLIED)
+    match_score = Column(Integer, nullable=True) # Optional caching of AI match score
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    company = relationship("CompanyProfile", foreign_keys=[company_id], back_populates="requests")
-    customer = relationship("CustomerProfile", foreign_keys=[customer_id], back_populates="requests")
-    job_description = relationship("JobDescription")
+    company = relationship("CompanyProfile", foreign_keys=[company_id], back_populates="applications")
+    customer = relationship("CustomerProfile", foreign_keys=[customer_id], back_populates="applications")
+    job_description = relationship("JobDescription", back_populates="applications")
+    document = relationship("CandidateDocument", back_populates="applications")
