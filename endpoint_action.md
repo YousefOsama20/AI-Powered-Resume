@@ -425,3 +425,23 @@ The ATS (Applicant Tracking System) router manages the pipeline lifecycle of a C
   "stage": "OFFER_SENT"
 }
 ```
+
+---
+
+## 6. Development & Utilities (`/api/dev`)
+
+### `DELETE /api/dev/reset-everything`
+**Description:** **🚨 DANGER - DANGER - DANGER 🚨** 
+Completely wipes the entire platform clean. It deletes all uploaded PDF files from the hard drive, drops all vectors from ChromaDB, and truncates every PostgreSQL table (wiping all users, JDs, applications, and profiles), then re-seeds the Job Types and Functions. 
+Use this to get a fresh start for testing.
+
+**Role Required:** ANY (No Auth Required)
+
+**Input:** *(None)*
+
+**Output:**
+```json
+{
+  "message": "System completely wiped and reset. Ready for clean testing!"
+}
+```
