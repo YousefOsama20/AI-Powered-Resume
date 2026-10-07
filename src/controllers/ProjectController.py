@@ -10,6 +10,7 @@ class ProjectController(BaseController):
         super().__init__()
 
     def get_customer_path(self, customer_id: str):
+        # Get or create the file storage directory for a customer. | Customer
         # Type: Main function
         customer_dir = os.path.join(
             self.files_dir,

@@ -157,6 +157,7 @@ async def index_file(request: NLPIndexRequest, current_user: User = Depends(get_
 
 @nlp_router.get("/jd")
 async def list_job_descriptions(current_user: User = Depends(get_current_company)):
+    """List all Job Descriptions owned by the logged-in company. | Target: Company"""
     # Type: Main function
     """
     Returns a list of all Job Description names owned by the logged-in company.
@@ -183,6 +184,7 @@ async def list_job_descriptions(current_user: User = Depends(get_current_company
 
 @nlp_router.post("/jd")
 async def store_job_description(request: NLPJDStoreRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Create a new Job Description, extract skills via LLM, and embed into ChromaDB. | Target: Company"""
     # Type: Main function
     """
     Extracts skills, embeddings, and required experience from a Job Description,
@@ -273,6 +275,7 @@ async def store_job_description(request: NLPJDStoreRequest, current_user: User =
 
 @nlp_router.put("/jd")
 async def update_job_description(request: NLPJDUpdateRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Update an existing JD, re-extract skills and re-embed. | Target: Company"""
     # Type: Main function
     """
     Updates an existing Job Description owned by the logged-in company.
@@ -363,6 +366,7 @@ async def update_job_description(request: NLPJDUpdateRequest, current_user: User
 
 @nlp_router.delete("/jd/{jd_name}")
 async def delete_job_description(jd_name: str, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Delete a JD from both PostgreSQL and ChromaDB. | Target: Company"""
     # Type: Main function
     """
     Deletes a Job Description owned by the logged-in company from both SQL and ChromaDB.
@@ -402,6 +406,7 @@ async def delete_job_description(jd_name: str, current_user: User = Depends(get_
 
 @nlp_router.post("/match")
 async def match_resumes(request: NLPMatchRequest, current_user: User = Depends(get_current_company), db: Session = Depends(get_db)):
+    """Run hybrid AI matching (Semantic + Keywords + Experience) against candidate pool. | Target: Company"""
     # Type: Main function
     """
     Match Job Description against all candidates in the global candidate pool.

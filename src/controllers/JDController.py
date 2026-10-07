@@ -57,6 +57,7 @@ class JDController(BaseController):
             return False
 
     def get_jd(self, jd_name: str, company_id: str = None) -> Optional[Dict[str, Any]]:
+        # Retrieve a single JD with its skills and metadata from ChromaDB. | Company
         # Type: Main function
         """
         Retrieves a stored Job Description and its metadata from ChromaDB.
@@ -100,6 +101,7 @@ class JDController(BaseController):
             return None
 
     def list_jds(self, company_id: str = None) -> list:
+        # List all JDs for a company from ChromaDB. | Company
         # Type: Main function
         """
         Returns a list of all stored JD names with their classified skills and experience.
@@ -143,6 +145,7 @@ class JDController(BaseController):
             return []
 
     def delete_jd(self, jd_name: str, company_id: str = None) -> bool:
+        # Delete a JD from ChromaDB by name. | Company
         # Type: Main function
         """Deletes a JD from ChromaDB. Optionally verifies company ownership."""
         try:

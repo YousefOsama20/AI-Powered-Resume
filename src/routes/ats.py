@@ -21,9 +21,7 @@ ats_router = APIRouter(
 
 @ats_router.get("/jobs/public")
 async def list_public_jobs(db: Session = Depends(get_db)):
-    """
-    Candidates can browse public job descriptions to apply.
-    """
+    """Browse all public job descriptions to apply. | Target: Customer (or unauthenticated)"""
     try:
         jds = db.query(JobDescription).filter_by(is_public=1).all()
         results = []
@@ -45,9 +43,7 @@ async def apply_to_job(
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
     ):
-    """
-    Candidate applies to a public job. Places them in the APPLIED column.
-    """
+    """Candidate applies to a public job, placed in APPLIED stage. | Target: Customer"""
     try:
         customer_id = current_user.customer_profile.id
         
@@ -80,9 +76,7 @@ async def list_my_applications(
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
     ):
-    """
-    Customer views all jobs they applied to or were contacted for.
-    """
+    """View all jobs the candidate applied to or was contacted for. | Target: Customer"""
     try:
         customer_id = current_user.customer_profile.id
         apps = db.query(JobApplication).filter_by(customer_id=customer_id).all()
@@ -107,9 +101,7 @@ async def accept_company_contact(
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
     ):
-    """
-    Customer accepts a company's contact request. Moves from CONTACTED to CONSIDERED.
-    """
+    """Accept a company contact request, moves CONTACTED to CONSIDERED. | Target: Customer"""
     try:
         customer_id = current_user.customer_profile.id
         app = db.query(JobApplication).filter_by(id=application_id, customer_id=customer_id).first()
@@ -139,9 +131,7 @@ async def company_contact_candidate(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
     ):
-    """
-    Company reaches out to a candidate from the Match pool. Places in CONTACTED column.
-    """
+    """Company reaches out to a candidate from AI Match, placed in CONTACTED stage. | Target: Company"""
     try:
         company_id = current_user.company_profile.id
 
@@ -174,9 +164,7 @@ async def get_kanban_board(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
     ):
-    """
-    Returns the Kanban board data for a specific job, grouped by stage.
-    """
+    """Returns the Kanban board data for a job grouped by pipeline stage. | Target: Company"""
     try:
         company_id = current_user.company_profile.id
         
@@ -218,9 +206,7 @@ async def move_candidate_stage(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
     ):
-    """
-    Company drags and drops a candidate to a new pipeline stage.
-    """
+    """Company drags a candidate to a new pipeline stage (e.g. Interviewing). | Target: Company"""
     try:
         company_id = current_user.company_profile.id
         app = db.query(JobApplication).filter_by(id=application_id, company_id=company_id).first()

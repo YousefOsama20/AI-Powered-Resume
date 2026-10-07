@@ -13,16 +13,19 @@ from models.enums import ProcessingEnum, ResumeSectionEnum, SECTION_PATTERNS
 class ProcessController(BaseController):
 
     def __init__(self, customer_id: str):
+        # Initialize with customer_id to locate their file directory. | Customer
         # Type: Sub-function
         super().__init__()
         self.customer_id = customer_id
         self.customer_path = ProjectController().get_customer_path(customer_id=customer_id)
 
     def _get_file_extension(self, file_id: str) -> str:
+        # Get file extension from file_id. | Internal helper
         # Type: Sub-function
         return os.path.splitext(file_id)[-1].lower()
 
     def _get_file_loader(self, file_id: str) -> list:
+        # Pick the right loader (PDF/DOCX) based on file extension. | Internal helper
         # Type: Sub-function
         file_ext = self._get_file_extension(file_id=file_id)
         file_path = os.path.join(self.customer_path, file_id)
@@ -39,10 +42,12 @@ class ProcessController(BaseController):
         return []
 
     def get_file_content(self, file_id: str) -> list:
+        # Load raw file content from disk. | Customer (CV processing)
         # Type: Main function
         return self._get_file_loader(file_id=file_id)
 
     def _clean_text(self, text: str) -> str:
+        # Strip extra whitespace and normalize text. | Internal helper
         # Type: Sub-function
         """Strip control characters and normalize whitespace."""
         if not text:
@@ -53,6 +58,7 @@ class ProcessController(BaseController):
         return cleaned.strip()
 
     def match_section_header(self, line: str) -> Union[str, None]:
+        # Detect if a line is a CV section header (e.g. "Experience"). | Internal helper
         # Type: Sub-function
         """Checks if a single line matches any standard resume section header."""
         stripped = line.strip()
@@ -65,6 +71,7 @@ class ProcessController(BaseController):
         return None
 
     def segment_text_into_sections(self, full_text: str) -> Dict[str, str]:
+        # Split CV text into labeled sections (Education, Experience, etc). | Customer (CV parsing)
         # Type: Sub-function
         """
         Parses full resume text into classified sections.

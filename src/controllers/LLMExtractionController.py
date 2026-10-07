@@ -43,6 +43,7 @@ class LLMExtractionController(BaseController):
         self._ensure_llm_loaded()
 
     def _ensure_llm_loaded(self):
+        # Lazy-load the LLM client (Groq/OpenAI). | Internal
         # Type: Sub-function
         """Lazily initializes the LLM provider from app settings."""
         if LLMExtractionController._llm_provider is None:
@@ -66,6 +67,7 @@ class LLMExtractionController(BaseController):
                 logger.error(f"[LLMExtractionController] Failed to initialize LLM: {e}")
 
     def _normalize_skill_list(self, raw_list: list) -> List[str]:
+        # Clean and deduplicate a raw skill list. | Internal helper
         # Type: Sub-function
         """Normalizes a list of skills: lowercase, strip, deduplicate, remove empties."""
         seen = set()
@@ -79,6 +81,7 @@ class LLMExtractionController(BaseController):
         return result
 
     def _parse_skills_response(self, response: str) -> List[str]:
+        # Parse LLM text response into a list of skills. | Internal helper
         # Type: Sub-function
         """
         Parses the LLM response into a clean list of skills (for CVs).
@@ -110,6 +113,7 @@ class LLMExtractionController(BaseController):
         return list(set(fallback_skills))
 
     def _parse_classified_skills_response(self, response: str) -> Dict[str, List[str]]:
+        # Parse LLM response into essential vs elective skill categories. | Internal helper
         # Type: Sub-function
         """
         Parses the LLM response into classified skills (for JDs).
@@ -144,6 +148,7 @@ class LLMExtractionController(BaseController):
         return {"essential": fallback, "elective": []}
 
     def extract_skills_from_jd(self, job_description: str) -> Dict[str, List[str]]:
+        # Use LLM to classify JD skills into essential and elective. | Company (JD processing)
         # Type: Main function
         """
         Extracts and classifies skills from a job description using the LLM.
@@ -184,6 +189,7 @@ class LLMExtractionController(BaseController):
         return classified
 
     def extract_skills_from_cv(self, resume_text: str) -> List[str]:
+        # Use LLM to extract skills from a candidate CV. | Customer (CV processing)
         # Type: Main function
         """
         Extracts all skills from a CV/resume using the LLM.
@@ -225,6 +231,7 @@ class LLMExtractionController(BaseController):
 
     @property
     def is_available(self) -> bool:
+        # Check if the LLM backend is properly configured. | Internal
         # Type: Main function
         """Returns True if the LLM provider is configured and ready."""
         return self._llm_provider is not None

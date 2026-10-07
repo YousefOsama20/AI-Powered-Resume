@@ -33,6 +33,7 @@ class VectorDBController(BaseController):
         self.default_collection = self.app_settings.VECTOR_DB_COLLECTION
         
     def _get_collection(self, collection_name: str = None):
+        # Get or create a ChromaDB collection. | Internal
         # Type: Sub-function
         """Helper to get or create a collection."""
         name = collection_name or self.default_collection
@@ -123,6 +124,7 @@ class VectorDBController(BaseController):
             return []
 
     def delete_by_file(self, customer_id: str, file_id: str, collection_name: str = None) -> bool:
+        # Delete all vectors for a specific file_id. | Customer (CV deletion)
         # Type: Main function
         """Deletes all chunks associated with a specific file for a customer."""
         try:
@@ -143,6 +145,7 @@ class VectorDBController(BaseController):
             return False
 
     def delete_by_customer(self, customer_id: str, collection_name: str = None) -> bool:
+        # Delete all vectors for a customer. | Customer (account cleanup)
         # Type: Main function
         """Deletes all chunks associated with a specific customer."""
         try:
@@ -154,6 +157,7 @@ class VectorDBController(BaseController):
             return False
 
     def get_collection_count(self, collection_name: str = None) -> int:
+        # Get total number of vectors in a collection. | Internal
         # Type: Main function
         """Returns total items in the collection."""
         try:
@@ -163,6 +167,7 @@ class VectorDBController(BaseController):
             return 0
 
     def get_all_indexed_files(self, collection_name: str = None) -> List[Dict[str, str]]:
+        # List all unique file_ids indexed in a collection. | Internal
         # Type: Main function
         """Returns a list of all unique customer_id and file_id combinations in the DB."""
         try:

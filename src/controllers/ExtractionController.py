@@ -29,6 +29,7 @@ class ExtractionController(BaseController):
         self._ensure_model_loaded()
 
     def _ensure_model_loaded(self):
+        # Lazy-load spaCy NLP model. | Internal
         # Type: Sub-function
         if ExtractionController._nlp is None:
             logger.info("[ExtractionController] Loading spaCy en_core_web_sm model...")
@@ -42,6 +43,7 @@ class ExtractionController(BaseController):
         self._init_matcher()
 
     def _load_taxonomy(self) -> dict:
+        # Load skills taxonomy YAML from assets. | Internal
         # Type: Sub-function
         """
         Loads the taxonomy file.
@@ -65,6 +67,7 @@ class ExtractionController(BaseController):
         return data
 
     def _flatten_taxonomy(self, taxonomy: dict) -> list:
+        # Flatten nested taxonomy dict into a flat skills list. | Internal
         # Type: Sub-function
         """Flattens a categorized taxonomy dict into a deduplicated list of all skills."""
         all_skills = []
@@ -78,6 +81,7 @@ class ExtractionController(BaseController):
         return all_skills
 
     def _build_matcher(self, skills: list) -> PhraseMatcher:
+        # Build a spaCy PhraseMatcher from a list of skill strings. | Internal
         # Type: Sub-function
         """Builds a PhraseMatcher from a list of skill strings."""
         matcher = PhraseMatcher(ExtractionController._nlp.vocab, attr="LOWER")
@@ -87,6 +91,7 @@ class ExtractionController(BaseController):
         return matcher
 
     def _init_matcher(self):
+        # Initialize the spaCy matcher with all taxonomy skills. | Internal
         # Type: Sub-function
         """Initializes the full taxonomy and the default (full) matcher."""
         self.taxonomy = self._load_taxonomy()
@@ -98,21 +103,25 @@ class ExtractionController(BaseController):
         )
 
     def get_all_skills(self) -> list:
+        # Return all skills from the taxonomy. | Internal
         # Type: Main function
         """Returns the full flat list of all skills from all tracks."""
         return list(self.skills)
 
     def get_skills_by_track(self, track_name: str) -> list:
+        # Return skills for a specific track (e.g. "Python"). | Internal
         # Type: Main function
         """Returns skills for a specific career track."""
         return self.taxonomy.get(track_name, [])
 
     def get_track_names(self) -> list:
+        # Return all track names in the taxonomy. | Internal
         # Type: Main function
         """Returns all available track names."""
         return [k for k in self.taxonomy.keys() if k != "_flat"]
 
     def extract_skills(self, text: str, filter_skills: list = None) -> list:
+        # Extract matching skills from text using spaCy NLP. | Both (CV and JD skill extraction)
         # Type: Main function
         """
         Extracts skills from text based on the taxonomy.

@@ -32,6 +32,7 @@ class ExperienceController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def extract_required_experience(self, text: str) -> Optional[float]:
+        # Parse required years of experience from a JD text. | Company (JD parsing)
         # Type: Main function
         """
         Extracts the required years of experience from a job description.
@@ -81,11 +82,13 @@ class ExperienceController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _parse_month(self, month_str: str) -> Optional[int]:
+        # Convert month name string to month number. | Internal helper
         # Type: Sub-function
         """Converts a month name/abbreviation to a month number."""
         return MONTH_MAP.get(month_str.lower().rstrip("."))
 
     def _parse_date_ranges(self, text: str) -> List[Tuple[date, date]]:
+        # Extract work date ranges (e.g. Jan 2020 - Dec 2022) from CV text. | Internal helper
         # Type: Sub-function
         """
         Extracts all employment date ranges from resume text.
@@ -225,6 +228,7 @@ class ExperienceController(BaseController):
         return ranges
 
     def _merge_overlapping_ranges(self, ranges: List[Tuple[date, date]]) -> List[Tuple[date, date]]:
+        # Merge overlapping date ranges to avoid double-counting experience. | Internal helper
         # Type: Sub-function
         """Merges overlapping date ranges to avoid double-counting."""
         if not ranges:
@@ -246,6 +250,7 @@ class ExperienceController(BaseController):
         return merged
 
     def _calculate_total_years(self, ranges: List[Tuple[date, date]]) -> float:
+        # Sum total years from a list of non-overlapping date ranges. | Internal helper
         # Type: Sub-function
         """Calculates total years from a list of non-overlapping date ranges."""
         total_days = 0
@@ -255,6 +260,7 @@ class ExperienceController(BaseController):
         return round(total_days / 365.25, 1)
 
     def extract_candidate_experience(self, text: str) -> float:
+        # Extract total years of work experience from a CV. | Customer (CV parsing)
         # Type: Main function
         """
         Extracts total years of experience from resume text.
@@ -296,6 +302,7 @@ class ExperienceController(BaseController):
     # ──────────────────────────────────────────────────────────────────────────
 
     def calculate_experience_score(self,required: Optional[float],candidate: float) -> float:
+        # Score candidate experience vs JD requirement (0-100). | Company (matching)
         # Type: Main function
         """
         Calculates an experience score between 0.0 and 1.0.
