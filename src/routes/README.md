@@ -6,51 +6,51 @@ The `routes` folder in this project is responsible for defining the API endpoint
 
 ### `base.py`
 - **Function/Route:** `welcome`
-  - **What it does:** Handles the `GET /api/v1/` endpoint. It returns basic application information such as the app name and version by reading from the application settings.
+  - **What it does:** Handles the `GET /api/` endpoint. It returns basic application information such as the app name and version by reading from the application settings.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `base_router`. It uses the `get_settings` dependency to fetch application configurations.
 
 ### `data.py`
 - **Function/Route:** `upload_data`
-  - **What it does:** Handles the `POST /api/v1/data/upload/{project_id}` endpoint. It validates an uploaded file, generates a unique file path within a specific project directory, and saves the file in chunks asynchronously using `aiofiles`.
+  - **What it does:** Handles the `POST /api/data/upload/{project_id}` endpoint. It validates an uploaded file, generates a unique file path within a specific project directory, and saves the file in chunks asynchronously using `aiofiles`.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `data_router`. It delegates logic to `DataController` and `ProjectController`.
 - **Function/Route:** `process_endpoint`
-  - **What it does:** Handles the `POST /api/v1/data/process/{project_id}` endpoint. It retrieves a previously uploaded file's content and chunks it into smaller pieces (with optional overlap) for further NLP processing.
+  - **What it does:** Handles the `POST /api/data/process/{project_id}` endpoint. It retrieves a previously uploaded file's content and chunks it into smaller pieces (with optional overlap) for further NLP processing.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `data_router`. It delegates logic to `ProcessController`.
 
 ### `nlp.py`
 - **Function/Route:** `index_file`
-  - **What it does:** Handles the `POST /api/v1/nlp/index/{project_id}` endpoint. It parses and chunks a file, extracts skills and experience, generates vector embeddings for the text chunks, and stores the embedded chunks in a Vector DB.
+  - **What it does:** Handles the `POST /api/nlp/index/{project_id}` endpoint. It parses and chunks a file, extracts skills and experience, generates vector embeddings for the text chunks, and stores the embedded chunks in a Vector DB.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `ProcessController`, `EmbeddingController`, `ExtractionController`, `ExperienceController`, and `VectorDBController`.
 - **Function/Route:** `get_indexed_files`
-  - **What it does:** Handles the `GET /api/v1/nlp/files` endpoint. Retrieves a list of all indexed files and their associated project IDs from the Vector DB.
+  - **What it does:** Handles the `GET /api/nlp/files` endpoint. Retrieves a list of all indexed files and their associated project IDs from the Vector DB.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
 - **Function/Route:** `list_job_descriptions`
-  - **What it does:** Handles the `GET /api/v1/nlp/jd` endpoint. Returns a list of all stored Job Descriptions.
+  - **What it does:** Handles the `GET /api/nlp/jd` endpoint. Returns a list of all stored Job Descriptions.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `JDController`.
 - **Function/Route:** `store_job_description`
-  - **What it does:** Handles the `POST /api/v1/nlp/jd` endpoint. Extracts skills and requirements from a Job Description and stores it persistently in ChromaDB.
+  - **What it does:** Handles the `POST /api/nlp/jd` endpoint. Extracts skills and requirements from a Job Description and stores it persistently in ChromaDB.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `LLMExtractionController`, `ExperienceController`, `EmbeddingController`, and `JDController`.
 - **Function/Route:** `update_job_description`
-  - **What it does:** Handles the `PUT /api/v1/nlp/jd` endpoint. Updates an existing Job Description by re-extracting its metadata and overwriting its ChromaDB record.
+  - **What it does:** Handles the `PUT /api/nlp/jd` endpoint. Updates an existing Job Description by re-extracting its metadata and overwriting its ChromaDB record.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `LLMExtractionController`, `ExperienceController`, `EmbeddingController`, and `JDController`.
 - **Function/Route:** `match_resumes`
-  - **What it does:** Handles the `POST /api/v1/nlp/match/{project_id}` endpoint. It matches a provided job description against all indexed candidates in a project using a Hybrid ATS Scoring Engine (semantic + keyword).
+  - **What it does:** Handles the `POST /api/nlp/match/{project_id}` endpoint. It matches a provided job description against all indexed candidates in a project using a Hybrid ATS Scoring Engine (semantic + keyword).
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `MatchController`.
 - **Function/Route:** `delete_file_index`
-  - **What it does:** Handles the `DELETE /api/v1/nlp/{project_id}/file/{file_id}` endpoint. It deletes the indexed chunks for a specific file within a project from the Vector DB.
+  - **What it does:** Handles the `DELETE /api/nlp/{project_id}/file/{file_id}` endpoint. It deletes the indexed chunks for a specific file within a project from the Vector DB.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
 - **Function/Route:** `delete_project_index`
-  - **What it does:** Handles the `DELETE /api/v1/nlp/{project_id}` endpoint. It deletes all indexed chunks for an entire project from the Vector DB.
+  - **What it does:** Handles the `DELETE /api/nlp/{project_id}` endpoint. It deletes all indexed chunks for an entire project from the Vector DB.
   - **Type:** Main route function.
   - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
 
