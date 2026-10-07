@@ -11,7 +11,7 @@ from models import ResponseSignal
 from .schemes.data import ProcessRequest
 from routes.deps import get_current_customer, get_current_company
 from stores.db.database import get_db
-from models.sql_models import User, CustomerProfile, JobApplication, PipelineStage
+from models.sql_models import User, CustomerProfile, JobApplication, PipelineStage, CandidateDocument
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -25,6 +25,7 @@ async def upload_data(file: UploadFile,
                       app_settings: Settings = Depends(get_settings),
                       current_user: User = Depends(get_current_customer),
                       db: Session = Depends(get_db)):
+    """Upload a CV file (PDF/DOCX) and register it as a CandidateDocument. | Target: Customer"""
     # Type: Main function
     
     # validate the file properties
@@ -52,9 +53,20 @@ async def upload_data(file: UploadFile,
             while chunk := await file.read(app_settings.FILE_DEFAULT_CHUNK_SIZE):
                 await f.write(chunk)
                 
-        # Update SQL database with the uploaded file path
-        current_user.customer_profile.cv_file_path = file_path
+        # Update SQL database with the new Document
+        existing_docs = db.query(CandidateDocument).filter_by(customer_id=customer_id).count()
+        is_primary = 1 if existing_docs == 0 else 0
+        
+        new_doc = CandidateDocument(
+            customer_id=customer_id,
+            file_name=file.filename,
+            file_path=file_path,
+            vector_id=file_id,
+            is_primary=is_primary
+        )
+        db.add(new_doc)
         db.commit()
+        db.refresh(new_doc)
         
     except Exception as e:
         logger.error(f"Error while uploading file: {e}")
@@ -74,6 +86,7 @@ async def upload_data(file: UploadFile,
 async def process_endpoint(process_request: ProcessRequest,
                            current_user: User = Depends(get_current_customer),
                            db: Session = Depends(get_db)):
+    """Parse uploaded CV, extract sections, chunk text, and index into ChromaDB. | Target: Customer"""
     # Type: Main function
 
     file_id = process_request.file_id
@@ -104,9 +117,7 @@ async def process_endpoint(process_request: ProcessRequest,
             content={"signal": ResponseSignal.PROCESSING_FAILED.value}
         )
 
-    # Save vector DB ID to customer profile
-    current_user.customer_profile.cv_vector_id = file_id
-    db.commit()
+    # Document vector ID was already set during upload.
 
     return JSONResponse(
         content={
@@ -123,18 +134,27 @@ async def process_endpoint(process_request: ProcessRequest,
     )
 
 @data_router.get("/download/me")
-async def download_my_cv(current_user: User = Depends(get_current_customer)):
-    """
-    Customer downloads their own uploaded CV.
-    """
+async def download_my_cv(
+    document_id: str = None, 
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """Download own CV file. Optionally pass document_id, defaults to primary CV. | Target: Customer"""
     try:
-        cv_path = current_user.customer_profile.cv_file_path
-        if not cv_path or not os.path.exists(cv_path):
+        customer_id = current_user.customer_profile.id
+        if document_id:
+            doc = db.query(CandidateDocument).filter_by(id=document_id, customer_id=customer_id).first()
+        else:
+            doc = db.query(CandidateDocument).filter_by(customer_id=customer_id, is_primary=1).first()
+            if not doc:
+                doc = db.query(CandidateDocument).filter_by(customer_id=customer_id).first()
+
+        if not doc or not doc.file_path or not os.path.exists(doc.file_path):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"message": "CV file not found."}
             )
-        return FileResponse(path=cv_path, filename=os.path.basename(cv_path))
+        return FileResponse(path=doc.file_path, filename=doc.file_name)
     except Exception as e:
         logger.error(f"Error downloading own CV: {e}")
         return JSONResponse(
@@ -148,9 +168,7 @@ async def download_candidate_cv(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
     ):
-    """
-    Company downloads a candidate's CV ONLY if the candidate has accepted their request.
-    """
+    """Download a candidate CV only if they are at CONSIDERED stage or beyond. | Target: Company"""
     try:
         company_id = current_user.company_profile.id
         
@@ -173,14 +191,20 @@ async def download_candidate_cv(
             )
             
         # Get the CV path
-        customer = db.query(CustomerProfile).filter_by(id=customer_id).first()
-        if not customer or not customer.cv_file_path or not os.path.exists(customer.cv_file_path):
+        if application_record.document_id:
+            doc = db.query(CandidateDocument).filter_by(id=application_record.document_id).first()
+        else:
+            doc = db.query(CandidateDocument).filter_by(customer_id=customer_id, is_primary=1).first()
+            if not doc:
+                doc = db.query(CandidateDocument).filter_by(customer_id=customer_id).first()
+                
+        if not doc or not doc.file_path or not os.path.exists(doc.file_path):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"message": "Candidate's CV file not found on the server."}
             )
             
-        return FileResponse(path=customer.cv_file_path, filename=os.path.basename(customer.cv_file_path))
+        return FileResponse(path=doc.file_path, filename=doc.file_name)
         
     except Exception as e:
         logger.error(f"Error downloading candidate CV: {e}")
@@ -188,3 +212,58 @@ async def download_candidate_cv(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": "Internal server error."}
         )
+
+@data_router.get("/customer/documents")
+async def list_my_documents(
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """List all uploaded CV documents for the logged-in candidate. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+        docs = db.query(CandidateDocument).filter_by(customer_id=customer_id).all()
+        results = []
+        for doc in docs:
+            results.append({
+                "id": doc.id,
+                "file_name": doc.file_name,
+                "is_primary": bool(doc.is_primary),
+                "created_at": doc.created_at.isoformat()
+            })
+        return JSONResponse(content={"documents": results})
+    except Exception as e:
+        logger.error(f"Error listing documents: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@data_router.delete("/customer/documents/{document_id}")
+async def delete_my_document(
+    document_id: str,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """Delete a CV from disk, ChromaDB, and PostgreSQL. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+        doc = db.query(CandidateDocument).filter_by(id=document_id, customer_id=customer_id).first()
+        if not doc:
+            return JSONResponse(status_code=404, content={"message": "Document not found."})
+        
+        # Remove file from disk
+        if os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+            
+        # Delete from ChromaDB
+        try:
+            from controllers.VectorDBController import VectorDBController
+            vdb = VectorDBController()
+            vdb.delete_by_file(customer_id=customer_id, file_id=doc.vector_id, collection_name="candidates")
+        except Exception as vec_e:
+            logger.error(f"Could not delete from ChromaDB: {vec_e}")
+
+        db.delete(doc)
+        db.commit()
+        return JSONResponse(content={"message": "Document deleted successfully."})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting document: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
