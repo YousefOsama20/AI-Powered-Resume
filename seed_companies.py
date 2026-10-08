@@ -60,13 +60,13 @@ def main():
     if token1:
         jds_comp1 = [
             {
-                "jd_name": "Senior AI Developer",
-                "job_description": "We are looking for a Senior AI Developer with a minimum of 6 years of experience in software engineering, with at least 3 years focused on Machine Learning and NLP. Required: You must be proficient in Python, PyTorch, and building RAG (Retrieval-Augmented Generation) pipelines using LangChain and LlamaIndex. Deep expertise in vector databases like ChromaDB or Pinecone is required. You must have experience deploying models using HuggingFace and OpenAI APIs. Cloud platform experience (GCP or Azure) is mandatory. Nice to have: Experience with model evaluation techniques, CI/CD for ML pipelines, TensorFlow, and excellent communication skills for collaborating with product managers is a plus.",
+                "jd_name": "Senior Data Engineer",
+                "job_description": "We need a Senior Data Engineer with 5+ years of experience to architect our real-time data platform. Required: You must have deep expertise in Apache Kafka, Apache Spark, and data warehousing with Snowflake or Databricks. Proficiency in Python, Scala, and advanced SQL is required. Experience with data lakehouse architectures using Delta Lake and orchestration with Airflow or Prefect is mandatory. Nice to have: Experience with Apache Flink, data governance tools, data lineage tracking, Great Expectations for data quality, and cost optimization of cloud data workloads on AWS or GCP is a plus. Leadership experience including mentoring and sprint planning is desirable.",
                 "is_public": 1
             },
             {
-                "jd_name": "Junior AI Engineer",
-                "job_description": "We are looking for a Junior AI Engineer with 1 year of experience or strong academic projects in machine learning. Required: You must be comfortable writing Python scripts and have basic understanding of machine learning concepts. Experience with Scikit-learn, Pandas, and NumPy for data preprocessing and feature engineering is required. Basic understanding of neural networks is mandatory. Nice to have: Familiarity with deep learning frameworks like TensorFlow or PyTorch, Jupyter Notebooks, Git, SQL, and basic Linux commands is preferred. Curiosity about AI research and strong problem-solving abilities are a plus.",
+                "jd_name": "Junior Data Engineer",
+                "job_description": "Hiring a Junior Data Engineer with 1 year of experience to join our analytics team. Required: You must be able to build ETL pipelines using Python and SQL. Basic understanding of data modeling and data quality validation is required. Familiarity with Apache Airflow and data warehouses like BigQuery or Snowflake is mandatory. Nice to have: Experience with Git, Docker, cloud storage services like AWS S3 or GCS, dbt for data transformation, and visualization tools like Metabase or Looker is a plus. Attention to detail and good documentation habits are desirable.",
                 "is_public": 1
             }
         ]
@@ -85,8 +85,8 @@ def main():
     if token2:
         jds_comp2 = [
             {
-                "jd_name": "Senior Software Engineer",
-                "job_description": "We are hiring a Senior Software Engineer with a minimum of 5 years of experience. Required skills: You must be proficient in Python, FastAPI, and PostgreSQL. Strong experience in building RESTful APIs, writing unit tests with pytest, and using Docker for containerization is required. You must have hands-on experience with Git, CI/CD pipelines, and Linux system administration. Nice to have: Experience with Kubernetes, Redis caching, message queues like RabbitMQ or Kafka, and monitoring tools such as Prometheus and Grafana is a plus. Familiarity with Agile/Scrum methodologies and strong communication skills are desirable.",
+                "jd_name": "Junior DevOps Engineer",
+                "job_description": "We are looking for a Junior DevOps Engineer with 1 year of experience to support our infrastructure team. Required: You must have basic knowledge of Linux system administration, Docker containers, and CI/CD pipelines using GitHub Actions or Jenkins. Writing automation scripts in Bash and Python is required. Understanding of Git workflows and networking fundamentals (DNS, TCP/IP, HTTP) is mandatory. Nice to have: Familiarity with cloud platforms like AWS (EC2, S3, IAM) or GCP, Nginx, log monitoring with ELK Stack, and basic security practices is preferred. Willingness to participate in on-call rotation is a plus.",
                 "is_public": 1
             },
             {
