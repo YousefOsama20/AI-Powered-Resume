@@ -1,26 +1,41 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import MatchRing from '@/components/MatchRing';
+import JobTypeFilter, { buildJobTypeQuery, filterJobsByType } from '@/components/JobTypeFilter';
 import api from '@/lib/axios';
+import { Briefcase, MapPin } from 'lucide-react';
 
 export default function CandidateDashboard() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+
+  const fetchJobs = useCallback(async (typeIds: string[]) => {
+    setLoading(true);
+    try {
+      // Server-side filter: ?top_k=10&job_type_id=A&job_type_id=B (multi-select).
+      const qs = buildJobTypeQuery(typeIds, { top_k: 10 });
+      const res = await api.get(`/nlp/recommend-jobs${qs}`);
+      let list: any[] = res.data.recommended_jobs || [];
+      // Client-side safety net: instant + guards against stale/unfiltered payloads.
+      // Only applies when the payload actually carries job_type (new backend).
+      if (typeIds.length && list.length > 0 && list[0]?.job_type !== undefined) {
+        list = filterJobsByType(list, typeIds);
+      }
+      setJobs(list);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    api.get('/nlp/recommend-jobs?top_k=10')
-      .then(res => {
-        setJobs(res.data.recommended_jobs || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  }, []);
+    fetchJobs(selectedTypes);
+  }, [fetchJobs, selectedTypes]);
 
   const handleApply = async (jd_id: string) => {
     try {
@@ -31,6 +46,8 @@ export default function CandidateDashboard() {
     }
   };
 
+  const isFiltered = selectedTypes.length > 0;
+
   return (
     <DashboardLayout role="CANDIDATE">
       {/* Top Bar / Filters */}
@@ -38,18 +55,13 @@ export default function CandidateDashboard() {
         <h2 className="text-xl font-bold text-gray-900 mr-4">JOBS</h2>
         <div className="flex gap-4 text-sm font-medium">
           <span className="text-black border-b-2 border-black pb-4 -mb-4 cursor-pointer">Recommended</span>
+          <Link href="/candidate/jobs" className="text-gray-400 hover:text-gray-600 cursor-pointer">Browse All</Link>
           <span className="text-gray-400 hover:text-gray-600 cursor-pointer">Liked</span>
-          <span className="text-gray-400 hover:text-gray-600 cursor-pointer">Applied</span>
+          <Link href="/candidate/applications" className="text-gray-400 hover:text-gray-600 cursor-pointer">Applied</Link>
         </div>
       </div>
 
-      <div className="flex gap-2 mb-8 flex-wrap">
-        {['All Roles', 'Remote', 'Full-time', 'Senior Level'].map(filter => (
-          <span key={filter} className="px-4 py-1.5 bg-white border border-gray-200 rounded-full text-xs font-medium text-gray-600 cursor-pointer hover:bg-gray-50">
-            {filter}
-          </span>
-        ))}
-      </div>
+      <JobTypeFilter selected={selectedTypes} onChange={setSelectedTypes} />
 
       {/* Main Feed */}
       <div className="max-w-4xl space-y-6">
@@ -61,8 +73,23 @@ export default function CandidateDashboard() {
           </div>
         ) : jobs.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-gray-100">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No jobs matched yet</h3>
-            <p className="text-gray-500">We are still analyzing your profile or there are no JDs in the system.</p>
+            {isFiltered ? (
+              <>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No jobs match this filter</h3>
+                <p className="text-gray-500 mb-6">Try selecting more job types, or clear the filter to see all recommendations.</p>
+                <button
+                  onClick={() => setSelectedTypes([])}
+                  className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-full hover:bg-gray-700 transition-colors"
+                >
+                  Show All Jobs
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No jobs matched yet</h3>
+                <p className="text-gray-500">We are still analyzing your profile or there are no JDs in the system.</p>
+              </>
+            )}
           </div>
         ) : (
           jobs.map((job) => {
@@ -92,7 +119,20 @@ export default function CandidateDashboard() {
                       </Link>
                     </h3>
                     <p className="text-sm text-gray-500 mt-1 line-clamp-2">{job.company_name} • Required Exp: {job.required_experience} yrs</p>
-                    
+                    <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 flex-wrap">
+                      {(job.location) && (
+                        <span className="inline-flex items-center gap-1"><MapPin size={12} />{job.location}</span>
+                      )}
+                      {job.job_type && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-100 rounded-full font-medium">
+                          <Briefcase size={12} />{job.job_type.name}
+                        </span>
+                      )}
+                      {job.job_function && (
+                        <span className="px-2.5 py-0.5 bg-[#12b388]/10 text-[#12b388] rounded-full font-medium">{job.job_function.name}</span>
+                      )}
+                    </div>
+
                     {/* Progress Rings */}
                     <div className="flex items-center gap-8 mt-8">
                       <MatchRing percentage={expMatch} label="Experience Level" />
@@ -134,7 +174,7 @@ export default function CandidateDashboard() {
                     <div className="relative w-20 h-20 mb-3">
                       <svg className="transform -rotate-90 w-full h-full">
                         <circle cx="40" cy="40" r="36" stroke="rgba(255,255,255,0.2)" strokeWidth="6" fill="transparent" />
-                        <circle cx="40" cy="40" r="36" stroke="#12b388" strokeWidth="6" fill="transparent" 
+                        <circle cx="40" cy="40" r="36" stroke="#12b388" strokeWidth="6" fill="transparent"
                           strokeDasharray={226} strokeDashoffset={226 - ((isNaN(overallMatch) ? 0 : overallMatch) / 100) * 226} strokeLinecap="round" />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -144,7 +184,7 @@ export default function CandidateDashboard() {
                     <span className="text-xs font-bold tracking-widest uppercase mb-6 text-[#12b388]">
                       {overallMatch >= 80 ? 'Strong Match' : overallMatch >= 60 ? 'Good Match' : 'Fair Match'}
                     </span>
-                    <button 
+                    <button
                       onClick={() => handleApply(job.jd_id)}
                       className="w-full py-2.5 rounded-full bg-[#12b388] hover:bg-[#10a078] text-white text-sm font-bold transition-colors"
                     >

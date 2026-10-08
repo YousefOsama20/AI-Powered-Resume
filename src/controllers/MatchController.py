@@ -315,16 +315,29 @@ class MatchController:
         
         return ranked_unique[:top_k], jd_skills_output
 
-    def recommend_jobs(self, db: Session, document_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def recommend_jobs(self, db: Session, document_id: str, top_k: int = 5,
+                         job_type_ids: List[str] = None,
+                         job_function_ids: List[str] = None) -> List[Dict[str, Any]]:
         """
         Recommends JDs for a specific candidate document by reverse-matching.
         | Target: Customer
+
+        Optional multi-select filters (server-side):
+        - job_type_ids: only return JDs whose job_type_id is in this set.
+          JDs with NULL job_type_id are excluded when a filter is active
+          (they still appear under "All").
+        - job_function_ids: same semantics for job_function_id.
         """
         doc = db.query(CandidateDocument).filter_by(id=document_id).first()
         if not doc:
             return []
-            
+
         profile = doc.customer
+
+        # Normalize filter sets (drop empties).
+        type_filter = {str(v).strip() for v in (job_type_ids or []) if str(v).strip()}
+        func_filter = {str(v).strip() for v in (job_function_ids or []) if str(v).strip()}
+        has_filter = bool(type_filter or func_filter)
         
         # 1. Fetch Candidate Embeddings
         collection = self.vector_db._get_collection(CANDIDATE_COLLECTION)
@@ -359,9 +372,13 @@ class MatchController:
                 
         # 2. Search Job Descriptions
         jd_collection = self.vector_db._get_collection(JD_COLLECTION)
+        # When filters are active, fetch extra candidates so post-filtering
+        # still fills top_k (filtering happens after re-rank, below).
+        n_fetch = (top_k * 5 if has_filter else top_k * 3)
+        n_fetch = max(1, min(n_fetch, 250))
         results = jd_collection.query(
             query_embeddings=[avg_embedding],
-            n_results=top_k * 3 # Fetch extra for re-ranking
+            n_results=n_fetch # Fetch extra for re-ranking
         )
         
         if not results or not results["ids"] or len(results["ids"][0]) == 0:
@@ -391,6 +408,11 @@ class MatchController:
                 jd_sql = db.query(JobDescription).filter_by(jd_name=jd_name).first()
             if not jd_sql or jd_sql.is_public == 0:
                 logger.error(f"[MatchController] JD {chroma_jd_id} SQL check failed (is_public={jd_sql.is_public if jd_sql else None})")
+                continue
+            # Server-side multi-select filtering by taxonomy.
+            if type_filter and (not jd_sql.job_type_id or str(jd_sql.job_type_id) not in type_filter):
+                continue
+            if func_filter and (not jd_sql.job_function_id or str(jd_sql.job_function_id) not in func_filter):
                 continue
             if jd_sql.id in seen_jd_ids:
                 continue
@@ -477,6 +499,10 @@ class MatchController:
                 "jd_id": jd_sql.id,
                 "jd_name": jd_sql.jd_name,
                 "company_name": jd_sql.company.company_name if jd_sql.company else "Unknown",
+                "location": jd_sql.location,
+                "job_type": {"id": jd_sql.job_type.id, "name": jd_sql.job_type.name} if getattr(jd_sql, "job_type", None) else None,
+                "job_function": {"id": jd_sql.job_function.id, "name": jd_sql.job_function.name} if getattr(jd_sql, "job_function", None) else None,
+                "created_at": jd_sql.created_at.isoformat() if getattr(jd_sql, "created_at", None) else None,
                 "match_score": round(hybrid_score * 100, 2),
                 "semantic_score": round(semantic_score * 100, 2),
                 "keyword_score": round(keyword_score * 100, 2),

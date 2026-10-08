@@ -1,14 +1,15 @@
-from fastapi import APIRouter, status, Depends, HTTPException
+from fastapi import APIRouter, status, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 import logging
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 from controllers import ProcessController, EmbeddingController, VectorDBController, MatchController, ExtractionController, ExperienceController, LLMExtractionController, JDController
 from models import ResponseSignal
 from .schemes.nlp import NLPIndexRequest, NLPMatchRequest, NLPJDStoreRequest, NLPdeleteRequest, NLPJDUpdateRequest, NLPJDIdUpdateRequest
 from controllers.VectorDBController import CANDIDATE_COLLECTION
 from routes.deps import get_current_customer, get_current_company
-from models.sql_models import User, JobDescription, CustomerProfile
+from models.sql_models import User, JobDescription, CustomerProfile, JobApplication, ApplyAdviceCache
 from stores.db.database import get_db
 
 logger = logging.getLogger('uvicorn.error')
@@ -605,9 +606,23 @@ async def delete_job_description(jd_identifier: str, current_user: User = Depend
         jd_name = existing_jd.jd_name
         jd_id = existing_jd.id
 
-        # Delete from SQL
-        db.delete(existing_jd)
-        db.commit()
+        # Delete dependents first. JobApplication rows are ORM-cascaded, but
+        # ApplyAdviceCache has a plain FK with no cascade, so Postgres raises
+        # ForeignKeyViolation (apply_advice_cache_jd_id_fkey) unless we clear
+        # its rows explicitly. Cache rows are regenerable LLM output.
+        try:
+            db.query(ApplyAdviceCache).filter_by(jd_id=jd_id).delete(synchronize_session=False)
+            db.query(JobApplication).filter_by(jd_id=jd_id).delete(synchronize_session=False)
+            # Delete from SQL
+            db.delete(existing_jd)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error deleting JD dependents (jd_id={jd_id}): {e}")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"message": "Failed to delete job posting and its linked data."}
+            )
 
         # Delete from ChromaDB
         jd_controller = JDController()
@@ -621,6 +636,10 @@ async def delete_job_description(jd_identifier: str, current_user: User = Depend
             }
         )
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         logger.error(f"Error deleting JD: {e}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -805,10 +824,20 @@ async def delete_customer_index(current_user: User = Depends(get_current_custome
 async def recommend_jobs(
     document_id: str = None,
     top_k: int = 10,
+    job_type_id: List[str] = Query(default=[]),
+    job_type: List[str] = Query(default=[]),
+    job_function_id: List[str] = Query(default=[]),
+    job_function: List[str] = Query(default=[]),
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
     ):
-    """Get recommended jobs based on candidate CV. | Target: Customer"""
+    """Get recommended jobs based on candidate CV. | Target: Customer
+
+    Optional multi-select filters (all repeatable):
+    - `job_type_id=<uuid>&job_type_id=<uuid>` (or `job_type=<name>`)
+    - `job_function_id=<uuid>&...` (or `job_function=<name>`)
+    `"All"` = omit the params.
+    """
     try:
         try:
             top_k = max(1, min(int(top_k or 10), 50))
@@ -823,9 +852,40 @@ async def recommend_jobs(
                 document_id = doc.id
             else:
                 return JSONResponse(status_code=404, content={"message": "No CV found to match against."})
-                
+
+        # Resolve type/function names → ids so the frontend can filter by
+        # either id or display name (e.g. "Full Time"). Case-insensitive.
+        from models.sql_models import JobType, JobFunction
+        type_ids: List[str] = [str(v).strip() for v in (job_type_id or []) if str(v).strip()]
+        for name in (job_type or []):
+            n = str(name or "").strip()
+            if not n:
+                continue
+            # Already an id? keep it; resolution below is name-based only.
+            row = db.query(JobType).filter(JobType.name.ilike(n)).first()
+            if row:
+                type_ids.append(str(row.id))
+            else:
+                # Unknown name → keep raw value so the match simply yields
+                # zero rows instead of silently ignoring the filter.
+                type_ids.append(n)
+        func_ids: List[str] = [str(v).strip() for v in (job_function_id or []) if str(v).strip()]
+        for name in (job_function or []):
+            n = str(name or "").strip()
+            if not n:
+                continue
+            row = db.query(JobFunction).filter(JobFunction.name.ilike(n)).first()
+            if row:
+                func_ids.append(str(row.id))
+            else:
+                func_ids.append(n)
+
         match_controller = MatchController()
-        recommended = match_controller.recommend_jobs(db=db, document_id=document_id, top_k=top_k)
+        recommended = match_controller.recommend_jobs(
+            db=db, document_id=document_id, top_k=top_k,
+            job_type_ids=type_ids or None,
+            job_function_ids=func_ids or None,
+        )
         return JSONResponse(content={"recommended_jobs": recommended})
     except Exception as e:
         import traceback; logger.error(f"Error recommending jobs: {e}\n{traceback.format_exc()}")
@@ -837,7 +897,7 @@ async def debug_skill_match(
     jd_id: str = None,
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db),
-):
+    ):
     """Debug why a CV scores X% on a JD: raw vs canonical skills + matched/missing.
 
     | Target: Customer (own CV only)

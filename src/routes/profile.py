@@ -41,7 +41,7 @@ class CompanyProfileUpdate(BaseModel):
 async def get_customer_profile(
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
-):
+    ):
     """Fetch current candidate personal info. | Target: Customer"""
     try:
         profile = current_user.customer_profile
@@ -64,7 +64,7 @@ async def get_customer_profile(
 async def get_company_profile(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
-):
+    ):
     """Fetch current company profile info. | Target: Company"""
     try:
         profile = current_user.company_profile
@@ -88,7 +88,7 @@ async def update_customer_profile(
     payload: CustomerProfileUpdate,
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db)
-):
+    ):
     """Update candidate profile (phone, location, job types, job functions). | Target: Customer"""
     try:
         profile = current_user.customer_profile
@@ -125,7 +125,7 @@ async def update_company_profile(
     payload: CompanyProfileUpdate,
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
-):
+    ):
     """Update company profile (name, description, website, industry, location). | Target: Company"""
     try:
         profile = current_user.company_profile
@@ -201,7 +201,7 @@ async def upload_customer_photo(
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db),
     app_settings: Settings = Depends(get_settings),
-):
+    ):
     """Upload/replace the candidate profile photo (JPEG/PNG/WebP, max 5MB). | Target: Customer"""
     try:
         profile = current_user.customer_profile
@@ -224,7 +224,7 @@ async def upload_customer_photo(
 @profile_router.get("/customer/photo")
 async def get_customer_photo(
     current_user: User = Depends(get_current_customer),
-):
+    ):
     """Download own candidate profile photo. | Target: Customer"""
     profile = current_user.customer_profile
     if not profile:
@@ -236,7 +236,7 @@ async def get_customer_photo(
 async def delete_customer_photo(
     current_user: User = Depends(get_current_customer),
     db: Session = Depends(get_db),
-):
+    ):
     """Remove the candidate profile photo. | Target: Customer"""
     try:
         profile = current_user.customer_profile
@@ -258,7 +258,7 @@ async def upload_company_photo(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db),
     app_settings: Settings = Depends(get_settings),
-):
+    ):
     """Upload/replace the company profile photo/logo (JPEG/PNG/WebP, max 5MB). | Target: Company"""
     try:
         profile = current_user.company_profile
@@ -281,7 +281,7 @@ async def upload_company_photo(
 @profile_router.get("/company/photo")
 async def get_company_photo(
     current_user: User = Depends(get_current_company),
-):
+    ):
     """Download own company profile photo/logo. | Target: Company"""
     profile = current_user.company_profile
     if not profile:
@@ -293,7 +293,7 @@ async def get_company_photo(
 async def delete_company_photo(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db),
-):
+    ):
     """Remove the company profile photo/logo. | Target: Company"""
     try:
         profile = current_user.company_profile

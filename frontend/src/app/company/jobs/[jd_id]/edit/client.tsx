@@ -20,6 +20,8 @@ export default function EditJDClient({ jd_id }: { jd_id: string }) {
   const [jobTypeId, setJobTypeId] = useState('');
   const [jobFunctionId, setJobFunctionId] = useState('');
   const [isPublic, setIsPublic] = useState(1);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     api.get('/profile/taxonomy').then(res => setTaxonomy(res.data)).catch(console.error);
@@ -49,9 +51,14 @@ export default function EditJDClient({ jd_id }: { jd_id: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!jobDescription.trim()) return alert('Please provide the job description text.');
+    if (!jobDescription.trim()) {
+      setError('Please provide the job description text.');
+      return;
+    }
 
     setIsSubmitting(true);
+    setError('');
+    setSuccess('');
     try {
       const payload: any = {
         job_description: jobDescription,
@@ -62,11 +69,21 @@ export default function EditJDClient({ jd_id }: { jd_id: string }) {
       if (jobTypeId) payload.job_type_id = jobTypeId;
       if (jobFunctionId) payload.job_function_id = jobFunctionId;
       await api.put(`/nlp/jd/${jd_id}`, payload);
-      alert('Job Description updated successfully!');
+      // Keep the form usable so the JD can be updated again in the same
+      // session without a full reload. Previously isSubmitting stayed true
+      // on success, locking the button until sign-out/in.
+      setSuccess('Job Description updated successfully! You can keep editing below.');
+      // Reset the "keep current" selects so an unchanged second save
+      // doesn't resend stale ids.
+      setJobTypeId('');
+      setJobFunctionId('');
       router.push('/company/jobs');
-    } catch (err) {
+      router.refresh();
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to update Job Description');
+      setError(err.response?.data?.message || 'Failed to update Job Description. Please try again.');
+    } finally {
+      // Always re-enable the button — success or failure.
       setIsSubmitting(false);
     }
   };
@@ -108,6 +125,8 @@ export default function EditJDClient({ jd_id }: { jd_id: string }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium">{error}</div>}
+          {success && <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium">{success}</div>}
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">Job Function <span className="font-normal text-gray-400">(unchanged if empty)</span></label>

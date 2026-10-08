@@ -33,9 +33,9 @@ export default function CompanyJobs() {
     try {
       await api.delete(`/nlp/jd/${jd_id}`);
       setJds(prev => prev.filter(jd => jd.jd_id !== jd_id));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to delete job posting');
+      alert(err.response?.data?.message || 'Failed to delete job posting');
     }
     setDeletingId(null);
   };

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
+from typing import List
 import json
 import logging
 import mimetypes
@@ -9,7 +10,7 @@ import os
 from stores.db.database import get_db
 from models.sql_models import (
     User, JobApplication, JobDescription, PipelineStage, CustomerProfile,
-    CandidateDocument, ApplyAdviceCache, CompanyProfile,
+    CandidateDocument, ApplyAdviceCache, CompanyProfile, JobType, JobFunction,
 )
 from routes.deps import get_current_company, get_current_customer
 from .schemes.requests import CreateRequest, UpdateRequestStatus, MoveCandidate
@@ -26,17 +27,56 @@ ats_router = APIRouter(
 # ---------------------------------------------------------
 
 @ats_router.get("/jobs/public")
-async def list_public_jobs(db: Session = Depends(get_db)):
-    """Browse all public job descriptions to apply. | Target: Customer (or unauthenticated)"""
+async def list_public_jobs(
+    job_type_id: List[str] = Query(default=[]),
+    job_type: List[str] = Query(default=[]),
+    job_function_id: List[str] = Query(default=[]),
+    job_function: List[str] = Query(default=[]),
+    db: Session = Depends(get_db),
+):
+    """Browse all public job descriptions to apply. | Target: Customer (or unauthenticated)
+
+    Optional multi-select filters (all repeatable):
+    - `job_type_id=<uuid>&job_type_id=<uuid>` (or `job_type=<name>`, e.g. "Full Time")
+    - `job_function_id=<uuid>&...` (or `job_function=<name>`)
+    `"All"` = omit the params. JDs with NULL type are only in "All".
+    """
     try:
-        jds = db.query(JobDescription).filter_by(is_public=1).all()
+        query = db.query(JobDescription).filter_by(is_public=1)
+
+        # Resolve display names → ids (case-insensitive) so callers may
+        # filter by either id or JOB_TYPES name.
+        type_ids: List[str] = [str(v).strip() for v in (job_type_id or []) if str(v).strip()]
+        for name in (job_type or []):
+            n = str(name or "").strip()
+            if not n:
+                continue
+            row = db.query(JobType).filter(JobType.name.ilike(n)).first()
+            type_ids.append(str(row.id) if row else n)
+        if type_ids:
+            query = query.filter(JobDescription.job_type_id.in_(type_ids))
+
+        func_ids: List[str] = [str(v).strip() for v in (job_function_id or []) if str(v).strip()]
+        for name in (job_function or []):
+            n = str(name or "").strip()
+            if not n:
+                continue
+            row = db.query(JobFunction).filter(JobFunction.name.ilike(n)).first()
+            func_ids.append(str(row.id) if row else n)
+        if func_ids:
+            query = query.filter(JobDescription.job_function_id.in_(func_ids))
+
+        jds = query.order_by(JobDescription.created_at.desc()).all()
         results = []
         for jd in jds:
             results.append({
                 "jd_id": jd.id,
                 "jd_name": jd.jd_name,
-                "company_name": jd.company.company_name,
-                "created_at": jd.created_at.isoformat()
+                "company_name": jd.company.company_name if jd.company else "Unknown",
+                "location": jd.location,
+                "job_type": {"id": jd.job_type.id, "name": jd.job_type.name} if jd.job_type else None,
+                "job_function": {"id": jd.job_function.id, "name": jd.job_function.name} if jd.job_function else None,
+                "created_at": jd.created_at.isoformat() if jd.created_at else None,
             })
         return JSONResponse(content={"jobs": results})
     except Exception as e:
@@ -185,7 +225,7 @@ async def get_candidate_photo_for_company(
     customer_id: str,
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db),
-):
+    ):
     """Serve a candidate's profile photo to a company (visible pre-contact). | Target: Company"""
     try:
         profile = db.query(CustomerProfile).filter_by(id=customer_id).first()
