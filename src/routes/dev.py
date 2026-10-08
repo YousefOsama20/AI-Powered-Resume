@@ -9,7 +9,8 @@ import shutil
 from stores.db.database import get_db, engine
 from models.sql_models import Base
 from helpers.config import get_settings
-from controllers.VectorDBController import VectorDBController
+from controllers.VectorDBController import VectorDBController, CANDIDATE_COLLECTION
+from controllers.JDController import JD_COLLECTION
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -31,8 +32,8 @@ async def reset_database(db: Session = Depends(get_db)):
         # 1. WIPE CHROMADB
         try:
             client = VectorDBController().chroma_client
-            client.delete_collection("candidates")
-            client.delete_collection("jds")
+            client.delete_collection(CANDIDATE_COLLECTION)
+            client.delete_collection(JD_COLLECTION)
             logger.info("ChromaDB collections deleted.")
         except Exception as e:
             logger.warning(f"Error wiping ChromaDB (might already be empty): {e}")

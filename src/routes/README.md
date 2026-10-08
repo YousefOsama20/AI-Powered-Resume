@@ -1,73 +1,53 @@
 # Routes Directory Overview
 
-The `routes` folder in this project is responsible for defining the API endpoints (routes) of the FastAPI application. It handles incoming HTTP requests, performs basic data validation using Pydantic schemas (defined in the `schemes` subdirectory), delegates business logic to various controllers, and returns the appropriate HTTP responses. The routers defined in this folder are imported and registered in the main application entry point (`src/main.py`).
+`routes/` defines every FastAPI endpoint: validate with Pydantic `schemes/`, enforce roles via `deps.py`, delegate to `controllers/`, return JSON. Mounted in `src/main.py` with **no `/api` prefix**: `/welcome`, `/auth`, `/profile`, `/data`, `/nlp`, `/ats`, `/dev`. Full JSON contracts: `endpoint_action.md`.
 
-## File and Route Details
+## Shared
 
-### `base.py`
-- **Function/Route:** `welcome`
-  - **What it does:** Handles the `GET /api/` endpoint. It returns basic application information such as the app name and version by reading from the application settings.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `base_router`. It uses the `get_settings` dependency to fetch application configurations.
+### `deps.py`
+- `oauth2_scheme` — `OAuth2PasswordBearer(tokenUrl="api/auth/login")` (Swagger hint).
+- `get_current_user` — decode JWT (`JWT_SECRET_KEY`/`JWT_ALGORITHM`), load `User`, 401 otherwise.
+- `get_current_customer` — 403 unless `role == CUSTOMER`.
+- `get_current_company` — 403 unless `role == COMPANY`.
 
-### `data.py`
-- **Function/Route:** `upload_data`
-  - **What it does:** Handles the `POST /api/data/upload/{project_id}` endpoint. It validates an uploaded file, generates a unique file path within a specific project directory, and saves the file in chunks asynchronously using `aiofiles`.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `data_router`. It delegates logic to `DataController` and `ProjectController`.
-- **Function/Route:** `process_endpoint`
-  - **What it does:** Handles the `POST /api/data/process/{project_id}` endpoint. It retrieves a previously uploaded file's content and chunks it into smaller pieces (with optional overlap) for further NLP processing.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `data_router`. It delegates logic to `ProcessController`.
+### `base.py` → `GET /welcome/`
+Health check, returns `{app_name, app_version}` from `Settings`.
 
-### `nlp.py`
-- **Function/Route:** `index_file`
-  - **What it does:** Handles the `POST /api/nlp/index/{project_id}` endpoint. It parses and chunks a file, extracts skills and experience, generates vector embeddings for the text chunks, and stores the embedded chunks in a Vector DB.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `ProcessController`, `EmbeddingController`, `ExtractionController`, `ExperienceController`, and `VectorDBController`.
-- **Function/Route:** `get_indexed_files`
-  - **What it does:** Handles the `GET /api/nlp/files` endpoint. Retrieves a list of all indexed files and their associated project IDs from the Vector DB.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
-- **Function/Route:** `list_job_descriptions`
-  - **What it does:** Handles the `GET /api/nlp/jd` endpoint. Returns a list of all stored Job Descriptions.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `JDController`.
-- **Function/Route:** `store_job_description`
-  - **What it does:** Handles the `POST /api/nlp/jd` endpoint. Extracts skills and requirements from a Job Description and stores it persistently in ChromaDB.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `LLMExtractionController`, `ExperienceController`, `EmbeddingController`, and `JDController`.
-- **Function/Route:** `update_job_description`
-  - **What it does:** Handles the `PUT /api/nlp/jd` endpoint. Updates an existing Job Description by re-extracting its metadata and overwriting its ChromaDB record.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `LLMExtractionController`, `ExperienceController`, `EmbeddingController`, and `JDController`.
-- **Function/Route:** `match_resumes`
-  - **What it does:** Handles the `POST /api/nlp/match/{project_id}` endpoint. It matches a provided job description against all indexed candidates in a project using a Hybrid ATS Scoring Engine (semantic + keyword).
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `MatchController`.
-- **Function/Route:** `delete_file_index`
-  - **What it does:** Handles the `DELETE /api/nlp/{project_id}/file/{file_id}` endpoint. It deletes the indexed chunks for a specific file within a project from the Vector DB.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
-- **Function/Route:** `delete_project_index`
-  - **What it does:** Handles the `DELETE /api/nlp/{project_id}` endpoint. It deletes all indexed chunks for an entire project from the Vector DB.
-  - **Type:** Main route function.
-  - **Where it is used:** Registered in `src/main.py` via `nlp_router`. It utilizes `VectorDBController`.
+### `__init__.py`, `schemes/__init__.py`
+Package markers. `schemes/` holds `auth.py` (`UserRegisterRequest`, `UserLoginRequest`, `TokenResponse`, `UserResponse`), `data.py` (`ProcessRequest`), `nlp.py` (`NLPIndexRequest`, `NLPMatchRequest`, `NLPJDStoreRequest`, `NLPJDUpdateRequest`, `NLPJDIdUpdateRequest`, `NLPdeleteRequest`), `profile.py` (`CustomerProfileUpdate`, `CompanyProfileUpdate`), `requests.py` (`CreateRequest{customer_id,jd_id}`, `MoveCandidate{stage}`, `UpdateRequestStatus`).
 
-### `__init__.py`
-- Empty file used to make the directory a Python package.
+## `auth.py` → prefix `/auth`
+- `POST /register` (201) — email-unique check, bcrypt hash, create `User` + `CustomerProfile(name)` or `CompanyProfile(company_name)`. Body: `{name, email, password, role}`.
+- `POST /login` — JSON `{email, password}` (not form), verify bcrypt, mint JWT `{sub: user.id, role}` with `ACCESS_TOKEN_EXPIRE_MINUTES`. → `{access_token, role}`.
 
-### `schemes/data.py`
-- **Model:** `ProcessRequest`
-  - **What it does:** Defines the Pydantic data model for the process endpoint request to ensure `file_id`, `chunk_size`, and `overlap_size` are correctly typed and formatted.
-  - **Type:** Pydantic Schema (Class).
-  - **Where it is used:** Imported and used in `src/routes/data.py` by the `process_endpoint` function for request validation.
+## `profile.py` → prefix `/profile`
+- `GET /taxonomy` (any) — `{job_types[{id,name}], job_functions[{id,name}]}` for onboarding/forms.
+- `GET /customer` (CUSTOMER) — `{email, name, phone, location, job_types[], job_functions[]}`.
+- `PUT /customer` (CUSTOMER) — `{phone?, location?, job_type_ids[]?, job_function_ids[]?}`; clears + re-links M2M (unlimited multi-select; onboarding sends full arrays).
+- `GET /company` / `PUT /company` (COMPANY) — `{email, company_name, description, website, industry, location}`.
 
-### `schemes/nlp.py`
-- **Models:** `NLPIndexRequest`, `NLPMatchRequest`, `NLPJDStoreRequest`, `NLPJDUpdateRequest`, `NLPdeleteRequest`
-  - **What it does:** Defines Pydantic data models for NLP requests, validating fields like `file_id`, `job_description`, `jd_name`, `project_id`, etc.
-  - **Type:** Pydantic Schemas (Classes).
-  - **Where it is used:** Imported and used in `src/routes/nlp.py` by the various endpoint functions for request validation.
+## `data.py` → prefix `/data`
+- `POST /upload` (CUSTOMER, multipart `file`) — `DataController.validate_uploaded_file` → `ProjectController.get_customer_path` → save → create `CandidateDocument(customer_id, file_name, file_path, vector_id=file_id, is_primary=1-if-first)`.
+- `POST /process` (CUSTOMER) — legacy chunk preview via `ProcessController` (sections + chunks, no vector write).
+- `GET /download/me` (CUSTOMER) — own CV file stream.
+- `GET /download/candidate/{customer_id}` (COMPANY) — stream only with an application at `CONSIDERED+`, else 403.
+- `GET /customer/documents` / `DELETE /customer/documents/{document_id}` (CUSTOMER) — list / delete own docs (+ vectors).
 
-### `schemes/__init__.py`
-- Used to make the `schemes` directory a Python package.
+## `nlp.py` → prefix `/nlp`
+- `GET /files` — indexed `{file_id, customer_id}` combos.
+- `POST /index` (CUSTOMER) — the real CV indexer: `ProcessController` chunk → one global LLM CV extraction (canonicalized) ∪ per-chunk taxonomy skills + global safety net → `EmbeddingController` → `VectorDBController.index_chunks(candidates)`. Body: `{file_id, chunk_size?, overlap_size?, collection_name?}`.
+- `DELETE /delete/file {file_id}` / `DELETE /delete/customer` (CUSTOMER) — vector deletes.
+- `POST /jd` (COMPANY) — `_extract_jd_skills` (LLM classified → canonical → heuristic `extract_classified_skills` fallback) + required-exp + embed → `JDController.store_jd` (`{company_id}::{jd_name}`) + PG ownership row (`is_public, location, job_type_id, job_function_id`).
+- `GET /jd` (COMPANY) — own JDs from PG (`jd_id, jd_name, is_public, location, created_at`).
+- `PUT /jd` (by `jd_name`, legacy), `PUT /jd/{jd_id}` (by SQL id incl. metadata patch), `DELETE /jd/{jd_identifier}` (id or name; PG + Chroma).
+- `POST /match` (COMPANY) — `MatchController.match_candidates(db, jd_id|jd_name|job_description, top_k≤50)`; skips orphan vectors, returns scores + `matched/missing_*` + `orphan_skipped`.
+- `GET /recommend-jobs?document_id?&top_k=` (CUSTOMER) — `MatchController.recommend_jobs` (primary doc default); returns per-JD scores + `matched/missing_*` + `candidate_skills` for the dashboard's honest UI.
+- `GET /debug-match?jd_id&document_id?` (CUSTOMER, own CV) — raw vs canonical skill audit + `match_map` + keyword/essential/elective scores.
+
+## `ats.py` → prefix `/ats`
+Stages: `APPLIED, CONTACTED, CONSIDERED, INTERVIEWING, OFFER_SENT, HIRED, REJECTED, CANCELLED`.
+- Candidate: `GET /jobs/public`, `GET /jobs/public/{jd_id}` (public fields + personalized `matched/missing_*` + `candidate_skills` when `Authorization` present; `skills_source` = `stored|heuristic_fallback`), `POST /jobs/{jd_id}/apply` → `APPLIED` (400 if dup), `GET /customer/applications`, `PUT /customer/applications/{id}/accept` (`CONTACTED→CONSIDERED`).
+- Company: `POST /company/contact {customer_id, jd_id}` → `CONTACTED`, `GET /board/{jd_id}` (grouped incl. `candidate_email/phone/match_score`), `PUT /board/{application_id}/move {stage}`.
+
+## `dev.py` → prefix `/dev`
+- `DELETE /reset-everything` (no auth, **dev only**) — drop Chroma `candidates`+`jds`, rmtree `assets/files`, `TRUNCATE … CASCADE` PG (skip `alembic_version`), reseed taxonomy via `scripts/seed_taxonomy.seed()`.

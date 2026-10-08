@@ -5,7 +5,8 @@ class NLPIndexRequest(BaseModel):
     file_id: str
     chunk_size: Optional[int] = 1000
     overlap_size: Optional[int] = 200
-    collection_name: Optional[str] = "candidates"
+    # None = use the canonical CANDIDATE_COLLECTION server-side.
+    collection_name: Optional[str] = None
 
 class NLPJDStoreRequest(BaseModel):
     jd_name: str
@@ -23,10 +24,18 @@ class NLPJDUpdateRequest(BaseModel):
     job_type_id: Optional[str] = None
     job_function_id: Optional[str] = None
 
+class NLPJDIdUpdateRequest(BaseModel):
+    job_description: str
+    is_public: Optional[int] = None
+    location: Optional[str] = None
+    job_type_id: Optional[str] = None
+    job_function_id: Optional[str] = None
+
 class NLPMatchRequest(BaseModel):
     job_description: Optional[str] = None
     jd_name: Optional[str] = None
-    top_k: Optional[int] = 5
+    jd_id: Optional[str] = None
+    top_k: Optional[int] = 10
 
 class NLPdeleteRequest(BaseModel):
     file_id: str
