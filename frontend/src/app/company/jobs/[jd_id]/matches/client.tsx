@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import MatchRing from '@/components/MatchRing';
 import CandidatePreviewModal from '@/components/CandidatePreviewModal';
+import CandidateAvatar from '@/components/CandidateAvatar';
 import api from '@/lib/axios';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 
@@ -114,7 +115,9 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
 
                   <div className="flex-1 p-6 lg:p-8">
                     <div className="flex justify-between items-start mb-6">
-                      <div>
+                      <div className="flex items-center gap-4">
+                        <CandidateAvatar photoUrl={match.candidate_photo_url} name={match.candidate_name} size={56} />
+                        <div>
                         <h3
                           className="text-2xl font-bold text-gray-900 mb-2 hover:text-[#12b388] cursor-pointer transition-colors"
                           onClick={() => setSelected(match)}
@@ -130,6 +133,7 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
                           {typeof match.candidate_experience === 'number' && (
                             <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">{match.candidate_experience} yrs exp</span>
                           )}
+                        </div>
                         </div>
                       </div>
                     </div>

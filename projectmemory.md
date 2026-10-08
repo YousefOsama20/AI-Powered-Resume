@@ -1,6 +1,6 @@
-# Jobright AI Copilot - Project Memory & State
+# NextHire AI Copilot - Project Memory & State
 
-Comprehensive tracker for the AI-Powered Resume & ATS Platform (Jobright): architecture, what shipped, key fixes, roadmap.
+Comprehensive tracker for the AI-Powered Resume & ATS Platform (NextHire): architecture, what shipped, key fixes, roadmap.
 
 ## 1. Project Overview
 

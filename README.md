@@ -1,4 +1,4 @@
-# AI-Powered Resume ATS — Jobright Platform
+# AI-Powered Resume ATS — NextHire Platform
 
 > **Version:** 3.1 · **Stack:** FastAPI · PostgreSQL · ChromaDB · sentence-transformers · spaCy · LLM (OpenAI-compatible) · Next.js 16 / React 19 / Tailwind 4
 
@@ -8,7 +8,7 @@
 2. [Architecture Overview](#2-architecture-overview)
 3. [Repository Layout](#3-repository-layout)
 4. [Global Talent Pool + Direct-Apply Model](#4-global-talent-pool--direct-apply-model)
-5. [Frontend (Jobright UI)](#5-frontend-jobright-ui)
+5. [Frontend (NextHire UI)](#5-frontend-nexthire-ui)
 6. [Environment Variables & API Keys](#6-environment-variables--api-keys)
 7. [API Endpoints (real prefixes)](#7-api-endpoints-real-prefixes)
 8. [How to Run Locally](#8-how-to-run-locally)
@@ -21,7 +21,7 @@
 
 ## 1. What Is This Project?
 
-**AI-Powered Resume / Jobright** connects **Candidates (CUSTOMER)** with **Companies (COMPANY)** through an AI-driven ATS with two discovery directions:
+**AI-Powered Resume / NextHire** connects **Candidates (CUSTOMER)** with **Companies (COMPANY)** through an AI-driven ATS with two discovery directions:
 
 - **Company → Candidates:** a JD is matched against the entire global CV pool (`POST /nlp/match`), then the company contacts candidates into a Kanban pipeline.
 - **Candidate → Jobs:** a CV is reverse-matched against all public JDs (`GET /nlp/recommend-jobs`), with honest skill-overlap UI (green = in your CV, red = missing).
@@ -105,7 +105,7 @@ AI_powered_resume/
 
 ---
 
-## 5. Frontend (Jobright UI)
+## 5. Frontend (NextHire UI)
 
 - **Auth:** `/login`, `/register` — role cards (Candidate/Company), auto-login + redirect to the right onboarding.
 - **Candidate:** `/candidate/onboarding` (step 1: `MultiSelectDropdown` for Job Functions — unlimited — + chip-grid Job Types + location; step 2: CV upload; step 3: scanning animation) → `/candidate/dashboard` (Recommended feed, true keyword Skill ring + tooltip with essential/elective/semantic, green `You have` / red `Missing` chips, amber `Low skill overlap` banner under 30%) → `/candidate/jobs/[jd_id]` (Essential vs Nice-to-have with ✓/✗ personalization) → `/candidate/profile` (same multi-select), `/candidate/applications`, `/candidate/resumes`.

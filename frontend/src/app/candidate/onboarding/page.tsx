@@ -157,7 +157,7 @@ export default function CandidateOnboarding() {
           <p className="text-xs text-gray-500 mb-12">Files should be in PDF or Word format and must not exceed 10MB in size.</p>
 
           <div className="bg-[#12b388]/10 p-4 rounded-xl text-xs text-[#12b388] max-w-md font-medium">
-            Data privacy is the top priority at Jobright. Your resume will only be used for job matching and will never be shared with third parties.
+            Data privacy is the top priority at NextHire. Your resume will only be used for job matching and will never be shared with third parties.
           </div>
 
           <div className="flex justify-center mt-12 w-full">

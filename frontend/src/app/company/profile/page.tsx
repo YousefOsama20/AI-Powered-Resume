@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import AvatarUpload from '@/components/AvatarUpload';
 import api from '@/lib/axios';
 
 export default function CompanyProfile() {
@@ -13,6 +14,9 @@ export default function CompanyProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoVersion, setPhotoVersion] = useState(0);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     api.get('/profile/company')
@@ -23,6 +27,7 @@ export default function CompanyProfile() {
         setWebsite(data.website || '');
         setIndustry(data.industry || '');
         setLocation(data.location || '');
+        setPhotoUrl(data.photo_url || null);
         setLoading(false);
       })
       .catch(err => {
@@ -30,6 +35,34 @@ export default function CompanyProfile() {
         setLoading(false);
       });
   }, []);
+
+  const handlePhotoUpload = async (file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/profile/company/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setPhotoUrl(res.data.photo_url || '/profile/company/photo');
+      setPhotoVersion((v) => v + 1);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to upload photo. Use JPG, PNG or WebP under 5MB.');
+    }
+    setUploadingPhoto(false);
+  };
+
+  const handlePhotoRemove = async () => {
+    try {
+      await api.delete('/profile/company/photo');
+      setPhotoUrl(null);
+      setPhotoVersion((v) => v + 1);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to remove photo');
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +100,17 @@ export default function CompanyProfile() {
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
+              <h3 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-4">Company Logo</h3>
+              <AvatarUpload
+                photoUrl={photoUrl ? `${photoUrl}?v=${photoVersion}` : null}
+                fallbackLabel={companyName || 'Company'}
+                uploading={uploadingPhoto}
+                onUpload={handlePhotoUpload}
+                onRemove={handlePhotoRemove}
+              />
+            </div>
+
             <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
               <h3 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-4">About Your Company</h3>
               <div>

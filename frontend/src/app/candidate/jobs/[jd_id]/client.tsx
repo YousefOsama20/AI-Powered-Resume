@@ -12,6 +12,7 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   // Normalize API skills: backend returns arrays, but be tolerant of
   // comma-strings, null, or legacy shapes so the split never silently hides.
@@ -61,6 +62,7 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
     api.get(`/ats/jobs/public/${jd_id}`)
       .then(res => {
         setJob(res.data);
+        setLogoError(false);
         setLoading(false);
       })
       .catch(err => {
@@ -133,8 +135,18 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-center gap-5">
-              <div className="w-14 h-14 rounded-xl bg-[#12b388]/10 flex items-center justify-center shrink-0">
-                <Building2 size={28} className="text-[#12b388]" />
+              <div className="w-14 h-14 rounded-xl bg-[#12b388]/10 flex items-center justify-center shrink-0 overflow-hidden">
+                {company.company_logo_url && !logoError ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`${api.defaults.baseURL}${company.company_logo_url}`}
+                    alt={`${company.company_name || 'Company'} logo`}
+                    className="w-full h-full object-cover"
+                    onError={() => setLogoError(true)}
+                  />
+                ) : (
+                  <Building2 size={28} className="text-[#12b388]" />
+                )}
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{job.jd_name}</h2>

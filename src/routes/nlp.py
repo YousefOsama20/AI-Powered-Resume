@@ -672,6 +672,7 @@ async def match_resumes(request: NLPMatchRequest, current_user: User = Depends(g
             
             result["candidate_name"] = profile.name
             result["candidate_location"] = profile.location
+            result["candidate_photo_url"] = f"/ats/candidates/{profile.id}/photo" if getattr(profile, "photo_path", None) else None
             result["file_id"] = file_id
             result["file_name"] = doc.file_name if doc else file_id
             result["document_id"] = doc.id if doc else None

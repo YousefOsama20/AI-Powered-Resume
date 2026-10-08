@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import BrandMark from '@/components/BrandMark';
 import { usePathname } from 'next/navigation';
 import { Briefcase, FileText, User, MessageSquare, Settings } from 'lucide-react';
 
@@ -32,13 +33,9 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-100 flex flex-col fixed h-full z-10">
         <div className="p-6 flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-full bg-[#12b388] flex items-center justify-center text-white font-bold text-sm relative">
-                <div className="absolute top-2 left-2 w-1 h-1 bg-black rounded-full" />
-                <div className="absolute top-2 right-2 w-1 h-1 bg-black rounded-full" />
-                <div className="absolute bottom-2 w-3 h-0.5 bg-black rounded-full" />
-            </div>
+            <BrandMark size={32} />
             <h1 className="text-xl font-bold text-gray-900 tracking-tight leading-none">
-                Jobright <span className="text-[#12b388]">●</span>
+                NextHire <span className="text-[#12b388]">●</span>
             </h1>
         </div>
         

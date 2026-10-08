@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
 import json
 import logging
+import mimetypes
+import os
 
 from stores.db.database import get_db
 from models.sql_models import (
     User, JobApplication, JobDescription, PipelineStage, CustomerProfile,
-    CandidateDocument, ApplyAdviceCache,
+    CandidateDocument, ApplyAdviceCache, CompanyProfile,
 )
 from routes.deps import get_current_company, get_current_customer
 from .schemes.requests import CreateRequest, UpdateRequestStatus, MoveCandidate
@@ -141,11 +143,13 @@ async def get_public_job_detail(jd_id: str, request: Request, db: Session = Depe
             "is_public": jd.is_public,
             "created_at": jd.created_at.isoformat(),
             "company": {
+                "company_id": company.id if company else None,
                 "company_name": company.company_name if company else None,
                 "description": company.description if company else None,
                 "website": getattr(company, "website", None) if company else None,
                 "industry": getattr(company, "industry", None) if company else None,
                 "location": getattr(company, "location", None) if company else None,
+                "company_logo_url": f"/ats/companies/{company.id}/logo" if company and getattr(company, "photo_path", None) else None,
             },
             "job_description": jd_data.get("job_description"),
             "essential_skills": essential,
@@ -160,6 +164,38 @@ async def get_public_job_detail(jd_id: str, request: Request, db: Session = Depe
         })
     except Exception as e:
         logger.error(f"Error fetching public job detail: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.get("/companies/{company_id}/logo")
+async def get_company_logo(company_id: str, db: Session = Depends(get_db)):
+    """Serve a company's profile logo. Public (job details are publicly browsable)."""
+    try:
+        company = db.query(CompanyProfile).filter_by(id=company_id).first()
+        photo_path = getattr(company, "photo_path", None) if company else None
+        if not photo_path or not os.path.exists(photo_path):
+            return JSONResponse(status_code=404, content={"message": "Company logo not found."})
+        media_type, _ = mimetypes.guess_type(photo_path)
+        return FileResponse(path=photo_path, media_type=media_type or "application/octet-stream")
+    except Exception as e:
+        logger.error(f"Error serving company logo: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.get("/candidates/{customer_id}/photo")
+async def get_candidate_photo_for_company(
+    customer_id: str,
+    current_user: User = Depends(get_current_company),
+    db: Session = Depends(get_db),
+):
+    """Serve a candidate's profile photo to a company (visible pre-contact). | Target: Company"""
+    try:
+        profile = db.query(CustomerProfile).filter_by(id=customer_id).first()
+        photo_path = getattr(profile, "photo_path", None) if profile else None
+        if not photo_path or not os.path.exists(photo_path):
+            return JSONResponse(status_code=404, content={"message": "Candidate photo not found."})
+        media_type, _ = mimetypes.guess_type(photo_path)
+        return FileResponse(path=photo_path, media_type=media_type or "application/octet-stream")
+    except Exception as e:
+        logger.error(f"Error serving candidate photo: {e}")
         return JSONResponse(status_code=500, content={"message": "Internal server error."})
 
 @ats_router.post("/jobs/{jd_id}/apply")

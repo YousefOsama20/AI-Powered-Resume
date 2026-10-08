@@ -58,6 +58,7 @@ class CustomerProfile(Base):
     name = Column(String, nullable=False)
     phone = Column(String)
     location = Column(String)
+    photo_path = Column(String, nullable=True)
 
     user = relationship("User", back_populates="customer_profile")
     job_types = relationship("JobType", secondary=customer_job_type)
@@ -88,6 +89,7 @@ class CompanyProfile(Base):
     website = Column(String, nullable=True)
     industry = Column(String, nullable=True)
     location = Column(String, nullable=True)
+    photo_path = Column(String, nullable=True)
 
     user = relationship("User", back_populates="company_profile")
     applications = relationship("JobApplication", back_populates="company", foreign_keys="[JobApplication.company_id]")

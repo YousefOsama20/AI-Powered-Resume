@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import MatchRing from '@/components/MatchRing';
+import CandidateAvatar from '@/components/CandidateAvatar';
 import { UserPlus, X } from 'lucide-react';
 
 interface CandidatePreviewModalProps {
@@ -48,7 +49,9 @@ export default function CandidatePreviewModal({ match, onClose, onContact }: Can
       >
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-gray-100">
-          <div>
+          <div className="flex items-center gap-4">
+            <CandidateAvatar photoUrl={match.candidate_photo_url} name={match.candidate_name} size={56} />
+            <div>
             <h3 className="text-2xl font-bold text-gray-900">{match.candidate_name || 'Anonymous Candidate'}</h3>
             <div className="flex items-center gap-3 mt-2 text-sm text-gray-500 flex-wrap">
               <span>📍 {match.candidate_location || 'Remote'}</span>
@@ -58,6 +61,7 @@ export default function CandidatePreviewModal({ match, onClose, onContact }: Can
               {typeof match.candidate_experience === 'number' && (
                 <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">{match.candidate_experience} yrs exp</span>
               )}
+            </div>
             </div>
           </div>
           <button

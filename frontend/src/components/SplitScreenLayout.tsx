@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import BrandMark from '@/components/BrandMark';
 
 interface SplitScreenLayoutProps {
   children: React.ReactNode;
@@ -12,16 +13,12 @@ export default function SplitScreenLayout({ children, heading }: SplitScreenLayo
       {/* Left side - Fixed Gradient */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#d4fce8] to-[#e0fcfb] flex-col p-16 fixed h-full border-r border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-32">
-            <div className="w-10 h-10 rounded-full bg-[#12b388] flex items-center justify-center text-white font-bold text-xl relative">
-                <div className="absolute top-3 left-3 w-1.5 h-1.5 bg-black rounded-full" />
-                <div className="absolute top-3 right-3 w-1.5 h-1.5 bg-black rounded-full" />
-                <div className="absolute bottom-2.5 w-4 h-0.5 bg-black rounded-full" />
-            </div>
+            <BrandMark size={40} />
             <div>
               <h1 className="text-xl font-bold text-gray-900 tracking-tight leading-none">
-                  Jobright <span className="text-[#12b388]">●</span>
+                  NextHire <span className="text-[#12b388]">●</span>
               </h1>
-              <span className="text-xs text-gray-500 font-medium tracking-wide">Your Jobright AI Copilot</span>
+              <span className="text-xs text-gray-500 font-medium tracking-wide">Your NextHire AI Copilot</span>
             </div>
         </div>
         
