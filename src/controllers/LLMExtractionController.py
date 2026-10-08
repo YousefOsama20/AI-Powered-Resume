@@ -69,16 +69,23 @@ class LLMExtractionController(BaseController):
     def _normalize_skill_list(self, raw_list: list) -> List[str]:
         # Clean and deduplicate a raw skill list. | Internal helper
         # Type: Sub-function
-        """Normalizes a list of skills: lowercase, strip, deduplicate, remove empties."""
-        seen = set()
-        result = []
-        for s in raw_list:
-            if isinstance(s, str):
-                normalized = s.strip().lower()
-                if normalized and normalized not in seen:
-                    seen.add(normalized)
-                    result.append(normalized)
-        return result
+        """Normalizes a list of skills via SkillNormalizer (canonical aliases,
+        plural handling, dedupe). Normalization is idempotent."""
+        try:
+            from .SkillNormalizer import normalize_skill_list as _canon
+            cleaned = [s for s in (raw_list or []) if isinstance(s, str)]
+            return _canon(cleaned)
+        except Exception:
+            # Fallback to legacy behavior if normalizer import fails
+            seen = set()
+            result = []
+            for s in raw_list:
+                if isinstance(s, str):
+                    normalized = s.strip().lower()
+                    if normalized and normalized not in seen:
+                        seen.add(normalized)
+                        result.append(normalized)
+            return result
 
     def _parse_skills_response(self, response: str) -> List[str]:
         # Parse LLM text response into a list of skills. | Internal helper

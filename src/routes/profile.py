@@ -25,6 +25,53 @@ class CustomerProfileUpdate(BaseModel):
 class CompanyProfileUpdate(BaseModel):
     company_name: Optional[str] = None
     description: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    location: Optional[str] = None
+
+@profile_router.get("/customer")
+async def get_customer_profile(
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
+    """Fetch current candidate personal info. | Target: Customer"""
+    try:
+        profile = current_user.customer_profile
+        if not profile:
+            return JSONResponse(status_code=404, content={"message": "Customer profile not found."})
+        return JSONResponse(content={
+            "email": current_user.email,
+            "name": profile.name,
+            "phone": profile.phone,
+            "location": profile.location,
+            "job_types": [{"id": jt.id, "name": jt.name} for jt in profile.job_types],
+            "job_functions": [{"id": jf.id, "name": jf.name} for jf in profile.job_functions],
+        })
+    except Exception as e:
+        logger.error(f"Error fetching customer profile: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@profile_router.get("/company")
+async def get_company_profile(
+    current_user: User = Depends(get_current_company),
+    db: Session = Depends(get_db)
+):
+    """Fetch current company profile info. | Target: Company"""
+    try:
+        profile = current_user.company_profile
+        if not profile:
+            return JSONResponse(status_code=404, content={"message": "Company profile not found."})
+        return JSONResponse(content={
+            "email": current_user.email,
+            "company_name": profile.company_name,
+            "description": profile.description,
+            "website": profile.website,
+            "industry": profile.industry,
+            "location": profile.location,
+        })
+    except Exception as e:
+        logger.error(f"Error fetching company profile: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
 
 @profile_router.put("/customer")
 async def update_customer_profile(
@@ -69,7 +116,7 @@ async def update_company_profile(
     current_user: User = Depends(get_current_company),
     db: Session = Depends(get_db)
 ):
-    """Update company profile (name, description). | Target: Company"""
+    """Update company profile (name, description, website, industry, location). | Target: Company"""
     try:
         profile = current_user.company_profile
         
@@ -77,6 +124,12 @@ async def update_company_profile(
             profile.company_name = payload.company_name
         if payload.description is not None:
             profile.description = payload.description
+        if payload.website is not None:
+            profile.website = payload.website
+        if payload.industry is not None:
+            profile.industry = payload.industry
+        if payload.location is not None:
+            profile.location = payload.location
 
         db.commit()
         return JSONResponse(content={"message": "Profile updated successfully."})

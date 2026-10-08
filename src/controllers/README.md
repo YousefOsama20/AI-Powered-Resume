@@ -1,102 +1,51 @@
 # Controllers Directory
 
-The `controllers` directory is a central part of the application's architecture. It contains the core business logic, handling data processing, database interactions, machine learning operations (such as embeddings and skill extraction), and file management. These controllers act as intermediaries between the API routes (in the `routes` folder) and the underlying data/models, ensuring modularity and separation of concerns.
+Business logic between `routes/` and data layers (Postgres, ChromaDB, files). Import via `from controllers import X`. Shared base: `BaseController` (loads `Settings`, `base_dir`).
 
-## Files and Functions
+## `SkillNormalizer.py` ⭐ canonical skill layer
+Single source of truth so JD free-form and CV taxonomy strings compare equally.
+- `normalize_skill(s)` — lower → `-`/`_`→space → strip quotes/punct → drop trailing `skill(s)` → `ALIASES` → singularize last token (`apis→api`). Idempotent.
+- `ALIASES` (seed): `rest apis→rest api`, `http protocols→http`, `linux commands→linux`, `problem-solving skills→problem solving`, `google cloud platform→gcp`, `amazon web services→aws`, `postgres→postgresql`, `nodejs→node.js`, `k8s→kubernetes`, `ci cd→ci/cd`, …
+- `normalize_skill_list(items)` — normalize + dedupe (order-preserving).
+- `normalize_classified({essential, elective})` — normalize both + `elective −= essential`.
+- `match_skills(candidate, required, threshold=0.88)` — exact on canonical + difflib fuzzy fallback → `(matched, missing, map)` in required-name space.
+- `score_from_matches(m_ess, n_ess, m_ele, n_ele)` — shared scorer: `ess=len(m)/n (empty-ess→1.0)`, `ele=len(m)/n (empty→0.0)`; both present: strict mode (`ess<0.5 → kw=ess`, else `ess*0.75+ele*0.25`); only-ess → `kw=ess`; neither → `0.0`.
+- Consumed by: `LLMExtractionController`, `ExtractionController`, `JDController`, `routes/nlp._normalize_classified_skills`, both `MatchController` paths, `routes/ats` personalized overlap, `scripts/reindex_skills`.
 
-### `BaseController.py`
-Provides base functionality and shared settings for other controllers.
-*   **`__init__`**: (Sub-function) Initializes application settings and sets up base directory paths.
-*   **`generate_random_string`**: (Sub-function) Generates a random alphanumeric string of a given length. Used in `DataController.py` to create unique file paths.
+## `MatchController.py` — hybrid ranker (both directions)
+- `__init__` — wires VectorDB, Embedding, Extraction, Experience, LLMExtraction, JD controllers.
+- `match_candidates(db, customer_id?, job_description?, jd_name?, top_k≤50, company_id?) -> (results, jd_skills)` — **company side.** Resolves JD (company-scoped `{company_id}::{jd_name}` first), canonicalizes skills, pulls up to 5000 chunks (whole pool, not top-100), groups by `file_id`, scores: `hybrid = .25 sem + .25 kw + .20 exp + .10 loc + .10 type + .10 func`; collapses to best-row-per-customer; skips orphan vectors (no PG profile). Used by `POST /nlp/match`.
+- `recommend_jobs(db, document_id, top_k) -> [jobs]` — **candidate side.** Loads primary `CandidateDocument`, averages its chunk embeddings, queries `jds` (`top_k*3` for re-rank), filters `is_public==1`, same keyword/strict-mode + experience + loc/type/func enrichment. Returns per-JD scores **plus** `matched/missing_essential/elective[]` + `candidate_skills[]` (dashboard chips). Used by `GET /nlp/recommend-jobs`.
 
-### `DataController.py`
-Handles operations related to data files and uploads.
-*   **`__init__`**: (Sub-function) Initializes the controller.
-*   **`validate_uploaded_file`**: (Main function) Validates the uploaded file's type and size. Used in `routes/data.py` during file upload.
-*   **`generate_unique_filepath`**: (Main function) Generates a unique and secure file path for saving uploaded files. Used in `routes/data.py`.
-*   **`get_clean_file_name`**: (Sub-function) Cleans and normalizes the original filename. Used internally by `generate_unique_filepath`.
+## `JDController.py` (`JD_COLLECTION = "jds"`)
+- `_chroma_id(jd_name, company_id)` — `{company_id}::{jd_name}` (legacy bare `jd_name` read fallback); `_display_name`, `_parse_skill_string` (JSON-list/comma tolerant + canonical).
+- `store_jd(jd_name, company_id, job_description, skills{essential,elective}, required_exp, embedding)` — upsert doc + `essential_skills/elective_skills/required_experience/company_id/jd_name` metadata; enforces `elective −= essential`.
+- `get_jd(jd_name, company_id?)` — scoped-then-legacy fetch; legacy flat `skills` → essential; returns `{job_description, skills{essential,elective}, required_experience, embedding}`.
+- `list_jds(company_id?)`, `delete_jd(jd_name, company_id?)` (scoped + legacy sweep).
 
-### `EmbeddingController.py`
-Manages the generation of text embeddings using NLP models.
-*   **`__init__`**: (Sub-function) Initializes the controller.
-*   **`_ensure_model_loaded`**: (Sub-function) Ensures the embedding model is loaded into memory to prevent redundant loading. Used internally.
-*   **`model`**: (Sub-function) Property that returns the loaded `SentenceTransformer` model. Used internally.
-*   **`embed_text`**: (Main function) Generates a vector embedding for a single text string. Available for external use.
-*   **`embed_texts`**: (Main function) Generates embeddings for a list of text strings. Used in `routes/nlp.py` before indexing into the vector database.
+## `LLMExtractionController.py`
+- `is_available` — true when `GENERATION_MODEL_ID` configured (`LLMProvider` via `GENERATION_BACKEND/KEY/URL`).
+- `extract_skills_from_jd(text) -> {essential, elective}` — system/user prompts from `stores/llm/templates/locales/en/skill_extraction.py` (canonical-name rules: `rest api` not `apis`, etc.); tolerant JSON/code-fence/comma parsing; flat-list fallback → all-essential.
+- `extract_skills_from_cv(text) -> [...]` — same prompt system for resumes; flat list.
+- `_normalize_skill_list` — delegates to `SkillNormalizer` (legacy lower/dedupe fallback).
 
-### `ExperienceController.py`
-Extracts and analyzes candidate experience from text.
-*   **`__init__`**: (Sub-function) Initializes the controller.
-*   **`extract_required_experience`**: (Main function) Extracts the required years of experience from a job description. Used in `MatchController.py`.
-*   **`_parse_month`**: (Sub-function) Parses string representations of months into integers. Used internally by `_parse_date_ranges`.
-*   **`_parse_date_ranges`**: (Sub-function) Identifies and extracts date ranges from text using regex. Used internally by `extract_candidate_experience`.
-*   **`_merge_overlapping_ranges`**: (Sub-function) Merges overlapping date ranges to accurately calculate total experience time. Used internally by `extract_candidate_experience`.
-*   **`_calculate_total_years`**: (Sub-function) Calculates total years of experience from a list of date ranges. Used internally by `extract_candidate_experience`.
-*   **`extract_candidate_experience`**: (Main function) Analyzes a candidate's text to extract their total years of experience. Used in `routes/nlp.py` and `MatchController.py`.
-*   **`calculate_experience_score`**: (Main function) Computes a matching score by comparing candidate experience with required experience. Used in `MatchController.py`.
+## `ExtractionController.py` (spaCy fallback, no LLM needed)
+- Taxonomy from `assets/taxonomy/skills-taxonomy.json` (seeded from `DefaultTaxonomy`); `_flatten_taxonomy`, `_build_matcher`/`_init_matcher` (`PhraseMatcher` on `LOWER`), lazy `en_core_web_sm` (auto-download).
+- `extract_skills(text, filter_skills?)` — full-taxonomy (indexing) or restricted matcher; output canonicalized via `SkillNormalizer`.
+- `split_jd_sections(text)` — splits on `nice to have|preferred|bonus|a plus|desirable|beneficial|optional|…`; `extract_classified_skills(jd)` — required-part vs nice-part sets (`elective −= essential`; no marker → all-essential). Used when LLM down/empty (`routes/nlp`, `routes/ats` read-repair).
 
-### `ExtractionController.py`
-Handles NLP-based extraction of skills based on a defined taxonomy.
-*   **`__init__`**: (Sub-function) Initializes the controller.
-*   **`_ensure_model_loaded`**: (Sub-function) Ensures the Spacy NLP model is loaded. Used internally.
-*   **`_load_taxonomy`**: (Sub-function) Loads the skills taxonomy from a JSON file. Used internally.
-*   **`_flatten_taxonomy`**: (Sub-function) Flattens the hierarchical taxonomy into a single list of skills. Used internally.
-*   **`_build_matcher`**: (Sub-function) Builds a Spacy `PhraseMatcher` with the given list of skills. Used internally.
-*   **`_init_matcher`**: (Sub-function) Initializes the overall matcher setup. Used internally.
-*   **`get_all_skills`**: (Main function) Returns a flat list of all skills in the taxonomy.
-*   **`get_skills_by_track`**: (Main function) Returns a list of skills filtered by a specific career track.
-*   **`get_track_names`**: (Main function) Returns a list of all available career track names.
-*   **`extract_skills`**: (Main function) Extracts matched skills from text, with an optional filter list. Used in `routes/nlp.py` and `MatchController.py`.
+## `ExperienceController.py`
+- `extract_required_experience(jd)` (regex `JD_EXPERIENCE_PATTERNS`), `extract_candidate_experience(text)` (date-range merge + stated-exp regex), `calculate_experience_score(required?, actual)`; helpers `_parse_month/_parse_date_ranges/_merge_overlapping_ranges/_calculate_total_years`. Patterns in `models/enums/ExperienceControllerEnums.py`.
 
-### `JDController.py`
-Manages persistent storage of Job Descriptions natively in a dedicated ChromaDB collection (`jds`).
-*   **`__init__`**: (Sub-function) Initializes the controller and connects to VectorDB.
-*   **`store_jd`**: (Main function) Stores a Job Description entirely in ChromaDB as a single document (text, embeddings, skills metadata).
-*   **`get_jd`**: (Main function) Retrieves a stored Job Description and its metadata from ChromaDB.
-*   **`list_jds`**: (Main function) Returns a list of all stored JD names with their skills and experience.
-*   **`delete_jd`**: (Main function) Deletes a JD from ChromaDB.
+## `EmbeddingController.py` + `VectorDBController.py`
+- Embedding: lazy `SentenceTransformer(EMBEDDING_MODEL_NAME)`; `embed_text`, `embed_texts` (batch `EMBEDDING_BATCH_SIZE`). Used by `/nlp/index` and JD store/match.
+- VectorDB: `_get_collection`, `index_chunks(chunks, embeddings, collection)` (writes `skills, experience_years, file_id, customer_id, section`), `search(query_embedding, customer_id?, n_results, collection)` (cosine → score), `delete_by_file/customer`, `get_collection_count`. Collections: `CANDIDATE_COLLECTION="candidates"` (import from `VectorDBController`), `JD_COLLECTION="jds"`.
 
-### `LLMExtractionController.py`
-Handles LLM-powered extraction of skills and metadata, acting as a smarter alternative to the taxonomy-based `ExtractionController`.
-*   **`__init__`**: (Sub-function) Initializes the LLM provider.
-*   **`extract_skills_from_jd`**: (Main function) Uses an LLM to dynamically extract required skills from a job description text.
-*   **`extract_skills_from_cv`**: (Main function) Uses an LLM to dynamically extract candidate skills from resume chunks.
+## `ProcessController.py` / `DataController.py` / `ProjectController.py` / `loaderController.py`
+- Process: `get_file_extension/get_file_loader (PDF/DOCX)/get_file_content/clean_text/match_section_header/segment_text_into_sections/process_file_content(chunk_size, overlap)` — sections via `ResumeSectionEnum`. `__init__(customer_id)` (not project).
+- Data: `validate_uploaded_file` (type/size vs `FILE_ALLOWED_TYPES/MAX_SIZE`), `generate_unique_filepath` (+ `get_clean_file_name`).
+- Project: `get_customer_path(customer_id)` → `assets/files/<customer_id>/` (legacy name kept).
+- loader: `load_pdf` (PyMuPDF/pypdf), `load_docx` (python-docx).
 
-### `MatchController.py`
-Orchestrates the matching of candidate resumes against job descriptions.
-*   **`__init__`**: (Sub-function) Initializes dependencies, including VectorDB, Extraction, and Experience controllers.
-*   **`match_candidates`**: (Main function) Compares a job description against candidates in the vector database and ranks them based on semantic similarity, skill matching, and experience. Used in `routes/nlp.py`.
-
-### `ProcessController.py`
-Responsible for reading, cleaning, and chunking text from files (PDF/DOCX).
-*   **`__init__`**: (Sub-function) Initializes the controller with a specific project ID.
-*   **`get_file_extension`**: (Sub-function) Determines the file extension of a given file ID. Used internally by `get_file_loader`.
-*   **`get_file_loader`**: (Sub-function) Selects the appropriate file loader (PDF or DOCX). Used internally by `get_file_content`.
-*   **`get_file_content`**: (Main function) Extracts the raw content from a file. Used in `routes/data.py` and `routes/nlp.py`.
-*   **`clean_text`**: (Sub-function) Cleans up raw text, removing artifacts and excess whitespace. Used internally.
-*   **`match_section_header`**: (Sub-function) Identifies standard resume section headers (e.g., Education, Experience). Used internally by `segment_text_into_sections`.
-*   **`segment_text_into_sections`**: (Main function) Segments raw text into structured dictionaries based on matched headers. Used internally by `process_file_content`.
-*   **`process_file_content`**: (Main function) Processes raw file content, segments it, and chunks it into smaller pieces for indexing. Used in `routes/data.py` and `routes/nlp.py`.
-
-### `ProjectController.py`
-Manages project directories and workspace paths.
-*   **`__init__`**: (Sub-function) Initializes the controller.
-*   **`get_project_path`**: (Main function) Retrieves the absolute path for a specific project directory. Used in `routes/data.py`, `ProcessController.py`, and `DataController.py`.
-
-### `VectorDBController.py`
-Handles all interactions with ChromaDB for storing and retrieving vector embeddings.
-*   **`__init__`**: (Sub-function) Initializes the controller.
-*   **`_get_collection`**: (Sub-function) Retrieves a specific ChromaDB collection. Used internally.
-*   **`index_chunks`**: (Main function) Inserts document chunks and their embeddings into the vector database. Used in `routes/nlp.py`.
-*   **`search`**: (Main function) Performs a semantic similarity search using a query embedding. Used in `MatchController.py`.
-*   **`delete_by_file`**: (Main function) Removes all indexed chunks associated with a specific file. Used in `routes/nlp.py`.
-*   **`delete_by_project`**: (Main function) Removes all indexed chunks associated with a specific project. Used in `routes/nlp.py`.
-*   **`get_collection_count`**: (Main function) Returns the total number of items in a collection. Used in `routes/nlp.py`.
-
-### `loaderController.py`
-Provides standalone helper functions for loading different file types.
-*   **`load_pdf`**: (Main function) Extracts text content from PDF files. Used in `ProcessController.py`.
-*   **`load_docx`**: (Main function) Extracts text content from DOCX files. Used in `ProcessController.py`.
-
-### `__init__.py`
-*   Exports all controller classes to simplify importing them across the application (e.g., `from controllers import DataController`).
+## `__init__.py`
+Exports all of the above + `SkillNormalizer` helpers (`normalize_skill`, `normalize_skill_list`, `normalize_classified`, `match_skills`, `score_from_matches`).

@@ -13,6 +13,12 @@ from chromadb.config import Settings as ChromaSettings
 from .BaseController import BaseController
 from models.enums.ResumeSectionEnum import ResumeSectionEnum
 
+# Canonical ChromaDB collection names. All candidate-CV reads/writes must use
+# CANDIDATE_COLLECTION so indexing and matching never drift apart again.
+# (NOTE: settings.VECTOR_DB_COLLECTION / default_collection is legacy and
+# must NOT be relied on for the candidate pool.)
+CANDIDATE_COLLECTION = "candidates"
+
 
 class VectorDBController(BaseController):
 

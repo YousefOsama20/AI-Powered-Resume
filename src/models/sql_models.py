@@ -85,6 +85,9 @@ class CompanyProfile(Base):
     user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
     company_name = Column(String, nullable=False)
     description = Column(Text)
+    website = Column(String, nullable=True)
+    industry = Column(String, nullable=True)
+    location = Column(String, nullable=True)
 
     user = relationship("User", back_populates="company_profile")
     applications = relationship("JobApplication", back_populates="company", foreign_keys="[JobApplication.company_id]")

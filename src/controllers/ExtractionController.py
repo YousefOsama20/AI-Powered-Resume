@@ -3,11 +3,28 @@ import spacy.cli
 from spacy.matcher import PhraseMatcher
 import json
 import os
+import re
 import logging
 from .BaseController import BaseController
 from models.enums import DefaultTaxonomy
 
 logger = logging.getLogger("uvicorn.error")
+
+# Markers that introduce the "nice to have / elective" section of a JD.
+# Used by the heuristic fallback when the LLM is unavailable or returns empty.
+ELECTIVE_SECTION_PATTERNS = [
+    r"nice\s*to\s*have",
+    r"nice-to-have",
+    r"preferred(?:\s+skills)?",
+    r"bonus(?:\s+points)?",
+    r"\ba\s+plus\b",
+    r"desirable",
+    r"beneficial",
+    r"\boptional\b",
+    r"would\s+be\s+a\s+plus",
+    r"is\s+a\s+plus",
+    r"is\s+preferred",
+]
 
 class ExtractionController(BaseController):
     """
@@ -151,6 +168,47 @@ class ExtractionController(BaseController):
         extracted = set()
         for match_id, start, end in matches:
             span = doc[start:end]
-            extracted.add(span.text.lower())
+            try:
+                from .SkillNormalizer import normalize_skill as _canon_one
+                v = _canon_one(span.text)
+            except Exception:
+                v = span.text.lower()
+            if v:
+                extracted.add(v)
             
         return list(extracted)
+
+    @staticmethod
+    def split_jd_sections(job_description: str) -> tuple:
+        """Split JD text into (essential_part, elective_part) using elective markers.
+
+        Returns the full text as essential_part and "" as elective_part when no
+        marker is found, so callers can safely fall back to all-essential.
+        """
+        if not job_description:
+            return "", ""
+        combined = "|".join(f"(?:{p})" for p in ELECTIVE_SECTION_PATTERNS)
+        match = re.search(combined, job_description, flags=re.IGNORECASE)
+        if not match:
+            return job_description, ""
+        return job_description[:match.start()], job_description[match.start():]
+
+    def extract_classified_skills(self, job_description: str) -> dict:
+        """Heuristic essential/elective split without needing an LLM.
+
+        Extracts taxonomy skills from the "required" part and the
+        "nice to have" part separately. A skill appearing in both stays
+        essential-only. Returns {"essential": [...], "elective": [...]}.
+        """
+        if not job_description:
+            return {"essential": [], "elective": []}
+        essential_part, elective_part = self.split_jd_sections(job_description)
+        essential = set(self.extract_skills(essential_part)) if essential_part else set()
+        elective = set(self.extract_skills(elective_part)) if elective_part else set()
+        # A skill in both sections is treated as required.
+        elective = {s for s in elective if s not in essential}
+        # If the JD has no detectable elective section, everything is essential
+        # (previous behaviour) — but at least the split was attempted.
+        if not elective_part:
+            return {"essential": sorted(essential), "elective": []}
+        return {"essential": sorted(essential), "elective": sorted(elective)}

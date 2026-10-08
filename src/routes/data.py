@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from helpers.config import get_settings, Settings
 from controllers import DataController, ProjectController, ProcessController
+from controllers import EmbeddingController, ExtractionController, ExperienceController, LLMExtractionController, VectorDBController
+from controllers.VectorDBController import CANDIDATE_COLLECTION
 from models import ResponseSignal
 from .schemes.data import ProcessRequest
 from routes.deps import get_current_customer, get_current_company
@@ -86,7 +88,7 @@ async def upload_data(file: UploadFile,
 async def process_endpoint(process_request: ProcessRequest,
                            current_user: User = Depends(get_current_customer),
                            db: Session = Depends(get_db)):
-    """Parse uploaded CV, extract sections, chunk text, and index into ChromaDB. | Target: Customer"""
+    """Parse uploaded CV, extract sections, chunk text, embed and index into ChromaDB. | Target: Customer"""
     # Type: Main function
 
     file_id = process_request.file_id
@@ -117,12 +119,84 @@ async def process_endpoint(process_request: ProcessRequest,
             content={"signal": ResponseSignal.PROCESSING_FAILED.value}
         )
 
+    # Enrich chunks with skills + experience, embed, and index into the
+    # global candidate pool so company-side /nlp/match can find ALL CVs.
+    # (Previously this endpoint returned chunks without indexing, which left
+    # seeded/uploaded CVs invisible to matching — only /nlp/index worked.)
+    try:
+        embedding_controller = EmbeddingController()
+        extraction_controller = ExtractionController()
+        experience_controller = ExperienceController()
+        llm_extraction_controller = LLMExtractionController()
+
+        full_resume_text = "\n\n".join([c.page_content for c in file_chunks])
+
+        llm_skills = []
+        if llm_extraction_controller.is_available:
+            try:
+                llm_skills = llm_extraction_controller.extract_skills_from_cv(full_resume_text)
+            except Exception as e:
+                logger.error(f"[Process] LLM skill extraction failed, using taxonomy fallback: {e}")
+                llm_skills = []
+
+        texts_to_embed = []
+        for chunk in file_chunks:
+            texts_to_embed.append(chunk.page_content)
+
+            if llm_skills:
+                chunk_text_lower = chunk.page_content.lower()
+                chunk_skills = [s for s in llm_skills if s in chunk_text_lower]
+                if not chunk_skills:
+                    chunk_skills = extraction_controller.extract_skills(chunk.page_content)
+            else:
+                chunk_skills = extraction_controller.extract_skills(chunk.page_content)
+
+            chunk.metadata["skills"] = ",".join(chunk_skills)
+
+            if chunk.metadata.get("section") == "Experience":
+                exp_years = experience_controller.extract_candidate_experience(chunk.page_content)
+                chunk.metadata["experience_years"] = exp_years
+            else:
+                chunk.metadata["experience_years"] = 0.0
+
+        embeddings = embedding_controller.embed_texts(texts_to_embed)
+
+        if not embeddings or len(embeddings) != len(file_chunks):
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"signal": ResponseSignal.EMBEDDING_FAILED.value}
+            )
+
+        vectordb_controller = VectorDBController()
+        success = vectordb_controller.index_chunks(
+            chunks=file_chunks,
+            embeddings=embeddings,
+            collection_name=CANDIDATE_COLLECTION
+        )
+
+        if not success:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"signal": ResponseSignal.VECTORDB_INDEX_FAILED.value}
+            )
+
+        total_in_collection = vectordb_controller.get_collection_count(CANDIDATE_COLLECTION)
+    except Exception as e:
+        logger.error(f"Error while embedding/indexing CV {file_id}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"signal": ResponseSignal.VECTORDB_INDEX_FAILED.value}
+        )
+
     # Document vector ID was already set during upload.
 
     return JSONResponse(
         content={
             "signal": ResponseSignal.PROCESSING_SUCCESS.value,
             "total_chunks": len(file_chunks),
+            "indexed_chunks": len(file_chunks),
+            "collection": CANDIDATE_COLLECTION,
+            "total_in_collection": total_in_collection,
             "chunks": [
                 {
                     "page_content": chunk.page_content,
@@ -254,9 +328,9 @@ async def delete_my_document(
             
         # Delete from ChromaDB
         try:
-            from controllers.VectorDBController import VectorDBController
+            from controllers.VectorDBController import VectorDBController, CANDIDATE_COLLECTION
             vdb = VectorDBController()
-            vdb.delete_by_file(customer_id=customer_id, file_id=doc.vector_id, collection_name="candidates")
+            vdb.delete_by_file(customer_id=customer_id, file_id=doc.vector_id, collection_name=CANDIDATE_COLLECTION)
         except Exception as vec_e:
             logger.error(f"Could not delete from ChromaDB: {vec_e}")
 

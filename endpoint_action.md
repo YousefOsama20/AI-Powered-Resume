@@ -1,447 +1,142 @@
 # API Endpoint Documentation
 
-This document provides a comprehensive guide to all the available API endpoints in the AI-Powered Resume Platform, detailing their required inputs (parameters, JSON bodies) and their expected outputs.
+Base URL: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`
+Auth: `Authorization: Bearer <JWT>` (from `POST /auth/login`).
+**No `/api` prefix** — routers mount at `/auth`, `/profile`, `/data`, `/nlp`, `/ats`, `/dev`, `/welcome` (see `src/main.py`).
+
+Conventions: `CUSTOMER` = candidate, `COMPANY` = recruiter. Scores are 0–100. Skill lists are canonical (see `SkillNormalizer`).
 
 ---
 
-## 1. Authentication (`/auth`)
+## 1. Health (`/welcome`)
 
-### `POST /auth/register`
-**Description:** Registers a new user as either a Customer (Candidate) or a Company.
-**Role Required:** ANY
-
-**Input (JSON Body):**
-```json
-{
-  "email": "user@example.com",
-  "password": "strongpassword123",
-  "role": "CUSTOMER", // OR "COMPANY"
-  // For CUSTOMER:
-  "name": "John Doe",
-  "location": "New York",
-  // For COMPANY:
-  "company_name": "Tech Corp",
-  "description": "Tech solutions"
-}
-```
-
-**Output:**
-```json
-{
-  "message": "User registered successfully",
-  "user_id": "uuid-string-here"
-}
-```
+### `GET /welcome/`
+Any. Returns `{app_name, app_version}` from `Settings`.
 
 ---
+
+## 2. Authentication (`/auth`)
+
+### `POST /auth/register` → 201
+Any. Creates `User` + `CustomerProfile(name)` or `CompanyProfile(company_name)`.
+
+```json
+{ "name": "John Doe", "email": "j@x.com", "password": "secret123", "role": "CUSTOMER" }
+```
+`role`: `CUSTOMER | COMPANY | ADMIN`. Output: created `User` (`id, email, role, created_at...`).
 
 ### `POST /auth/login`
-**Description:** Authenticates a user and returns a JWT access token.
-**Role Required:** ANY
+Any. JSON body (not form): `{ "email": "...", "password": "..." }` → `{ "access_token": "eyJ...", "role": "CUSTOMER" }`.
 
-**Input (`application/x-www-form-urlencoded`):**
-- `username`: The user's email address.
-- `password`: The user's password.
+---
 
-**Output:**
+## 3. Profiles (`/profile`)
+
+### `GET /profile/taxonomy` (any, used by onboarding + forms)
 ```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsIn...",
-  "token_type": "bearer"
-}
+{ "job_types": [{"id": "...", "name": "Remote"}], "job_functions": [{"id": "...", "name": "Backend Development"}] }
+```
+
+### `GET /profile/customer` (CUSTOMER)
+```json
+{ "email": "...", "name": "...", "phone": null, "location": "Anywhere in the US",
+  "job_types": [{"id": "...", "name": "..."}], "job_functions": [{"id": "...", "name": "..."}] }
+```
+
+### `PUT /profile/customer` (CUSTOMER)
+Unlimited multi-select arrays (used by onboarding + profile page):
+```json
+{ "phone": "+1 555...", "location": "New York, NY",
+  "job_type_ids": ["<uuid>", "..."], "job_function_ids": ["<uuid>", "..."] }
+```
+→ `{ "message": "Profile updated successfully." }`
+
+### `GET /profile/company` (COMPANY)
+`{ email, company_name, description, website, industry, location }`
+
+### `PUT /profile/company` (COMPANY)
+```json
+{ "company_name": "...", "description": "...", "website": "...", "industry": "...", "location": "..." }
 ```
 
 ---
 
-## 2. Profiles (`/api/base`)
+## 4. Data & CVs (`/data`)
 
-### `GET /api/base/me`
-**Description:** Retrieves the profile information of the currently logged-in user.
-**Role Required:** CUSTOMER or COMPANY
+### `POST /data/upload` (CUSTOMER, `multipart/form-data: file`)
+Validates type/size (`DataController`), saves under `assets/files/<customer_id>/`, creates `CandidateDocument(customer_id, file_name, file_path, vector_id=file_id, is_primary=1-if-first)`.
+→ `{ "signal": "file_upload_success", "file_id": "<vector_id>", "document_id": "<uuid>", "file_name": "..." }`
 
-**Input:** *(None. Requires Bearer Token)*
+### `POST /data/process` (CUSTOMER, legacy chunk preview)
+`{ file_id, chunk_size?, overlap_size? }` → section-segmented chunks (no vector write; use `/nlp/index` to embed).
 
-**Output:**
-```json
-{
-  "id": "uuid-string",
-  "email": "user@example.com",
-  "role": "CUSTOMER",
-  "profile": {
-    "name": "John Doe",
-    "location": "New York",
-    "cv_file_path": "/path/to/cv",
-    "cv_vector_id": "file_id.pdf"
-  }
-}
-```
+### `POST /nlp/index` (CUSTOMER — the real indexer; documented here for flow)
+`{ "file_id": "<vector_id>", "chunk_size": 500, "overlap_size": 50, "collection_name": null }`
+LLM CV skills (canonicalized) ∪ taxonomy skills per chunk + global-skill safety net → embed → Chroma `candidates`.
+→ `{ signal: "vectordb_index_success", customer_id, file_id, indexed_chunks, collection, total_in_collection }`
+
+### `GET /data/download/me` (CUSTOMER) — file stream of own primary CV.
+### `GET /data/download/candidate/{customer_id}` (COMPANY) — file stream; 403 unless an application exists at `CONSIDERED+`.
+### `GET /data/customer/documents` (CUSTOMER) — list own `CandidateDocument`s.
+### `DELETE /data/customer/documents/{document_id}` (CUSTOMER) — delete doc + vectors.
 
 ---
 
-## 3. Data & CVs (`/api/data`)
+## 5. NLP — index, JD, match (`/nlp`)
 
-### `POST /api/data/upload`
-**Description:** Customer uploads their resume file (PDF or DOCX).
-**Role Required:** CUSTOMER
+### `GET /nlp/files` — list indexed `{file_id, customer_id}` combos in Chroma.
+### `DELETE /nlp/delete/file` (CUSTOMER) `{ file_id }` · `DELETE /nlp/delete/customer` (CUSTOMER) — vector deletes.
 
-**Input (`multipart/form-data`):**
-- `file`: The physical document.
-
-**Output:**
+### `POST /nlp/jd` (COMPANY)
 ```json
-{
-  "signal": "file_upload_success",
-  "file_id": "uuid_filename.pdf"
-}
+{ "jd_name": "Junior Backend Developer", "job_description": "Looking for...",
+  "is_public": 1, "location": "Remote", "job_type_id": "<uuid|null>", "job_function_id": "<uuid|null>" }
 ```
+LLM classified skills → canonical → embed → Chroma id `{company_id}::{jd_name}` + PG ownership row.
+→ `{ message, jd_name, company_id, essential_skills[], elective_skills[], essential_count, elective_count, total_skills, required_experience }`
+
+### `GET /nlp/jd` (COMPANY) — own JDs from PG: `[{ jd_id, jd_name, is_public, location, created_at }]`, `{ message, total, jds }`.
+### `PUT /nlp/jd` (COMPANY) `{ jd_name, job_description }` — legacy update by name (re-extract + re-embed).
+### `PUT /nlp/jd/{jd_id}` (COMPANY) `{ job_description, is_public?, location?, job_type_id?, job_function_id? }` — update by SQL id.
+### `DELETE /nlp/jd/{jd_identifier}` (COMPANY) — accepts SQL id or legacy `jd_name`; deletes PG + Chroma. → `{ message, jd_id, jd_name }`.
+
+### `POST /nlp/match` (COMPANY) — rank global pool for a JD.
+```json
+{ "jd_id": "<uuid>", "jd_name": "optional", "job_description": "or raw text", "top_k": 10 }
+```
+→ `{ signal: "match_success", company_id, jd_skills: {essential[], elective[]}, total_matches, orphan_skipped, results: [{
+  candidate_id, file_id, customer_id, candidate_name, candidate_location, file_name, document_id, has_accepted_request,
+  match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score,
+  location_score, job_type_score, job_function_score,
+  required_experience, candidate_experience, experience_gap,
+  matched_essential_skills[], matched_elective_skills[], missing_essential_skills[], missing_elective_skills[], extracted_skills[] }] }`
+Weights: `0.25 sem + 0.25 kw + 0.20 exp + 0.10 loc + 0.10 type + 0.10 func`. Keyword: `ess*0.75+ele*0.25`, strict mode drops elective when `ess<0.5`.
+
+### `GET /nlp/recommend-jobs?document_id=&top_k=10` (CUSTOMER) — reverse-match primary CV vs public JDs.
+→ `{ recommended_jobs: [{ jd_id, jd_name, company_name, match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score, location_score, job_type_score, job_function_score, required_experience, essential_skills[], elective_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[], candidate_skills[] }] }`
+Dashboard renders Skill ring = `keyword_score` (tooltip adds essential/elective/semantic).
+
+### `GET /nlp/debug-match?jd_id=&document_id=` (CUSTOMER, own CV)
+Audit bundle: `{ document_id, jd_id, jd_name, candidate_skills_raw[], candidate_skills_canonical[], jd_essential_raw[], jd_elective_raw[], jd_essential_canonical[], jd_elective_canonical[], matched_essential[], missing_essential[], matched_elective[], missing_elective[], match_map{}, scores: {keyword_score, essential_score, elective_score} }`.
 
 ---
 
-### `POST /api/data/process`
-**Description:** Parses the uploaded CV, extracts sections, chunks text, and indexes it into ChromaDB.
-**Role Required:** CUSTOMER
+## 6. ATS pipeline (`/ats`) — stages: `APPLIED, CONTACTED, CONSIDERED, INTERVIEWING, OFFER_SENT, HIRED, REJECTED, CANCELLED`
 
-**Input (JSON Body):**
-```json
-{
-  "file_id": "uuid_filename.pdf",
-  "chunk_size": 500,
-  "overlap_size": 50
-}
-```
+### `GET /ats/jobs/public` (any) → `{ jobs: [{ jd_id, jd_name, company_name, created_at }] }`
+### `GET /ats/jobs/public/{jd_id}` (any; personalized when authed)
+Always: `{ jd_id, jd_name, location, job_type{id,name}, job_function{id,name}, is_public, created_at, company{...}, job_description, essential_skills[], elective_skills[], skills_source: stored|heuristic_fallback, required_experience }`.
+With `Authorization` (candidate): adds `candidate_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[]` (detail page renders ✓ green / ✗ red).
 
-**Output:**
-```json
-{
-  "signal": "processing_success",
-  "total_chunks": 15,
-  "chunks": [
-    {
-      "page_content": "Experienced in Python and FastAPI...",
-      "metadata": { "section": "Experience", "chunk_id": "..." }
-    }
-  ]
-}
-```
+### `POST /ats/jobs/{jd_id}/apply` (CUSTOMER) → 201 `{ message, application_id }` (400 if already in pipeline).
+### `GET /ats/customer/applications` (CUSTOMER) → `{ applications: [{ application_id, company_name, jd_name, stage, created_at }] }`
+### `PUT /ats/customer/applications/{application_id}/accept` (CUSTOMER) — `CONTACTED → CONSIDERED`.
+### `POST /ats/company/contact` (COMPANY) `{ customer_id, jd_id }` → 201 (candidate enters `CONTACTED`).
+### `GET /ats/board/{jd_id}` (COMPANY) → `{ jd_name, board: { APPLIED: [{application_id, candidate_id, candidate_name, candidate_email, candidate_phone, match_score, created_at}], CONTACTED: [], ... } }`
+### `PUT /ats/board/{application_id}/move` (COMPANY) `{ stage: "INTERVIEWING" }` → `{ message, stage }`
 
 ---
 
-### `GET /api/data/download/me`
-**Description:** Allows a Customer to securely download the CV they previously uploaded.
-**Role Required:** CUSTOMER
+## 7. Dev (`/dev`)
 
-**Input:** *(None)*
-**Output:** File stream (`application/pdf` or `application/msword`).
-
----
-
-### `GET /api/data/download/candidate/{customer_id}`
-**Description:** Allows a Company to download a Candidate's CV, **only if** the candidate is at `CONSIDERED` stage or beyond (`INTERVIEWING`, `OFFER_SENT`, `HIRED`) in the ATS pipeline.
-**Role Required:** COMPANY
-
-**Input (Path Parameter):**
-- `customer_id`: The ID of the candidate.
-
-**Output:** File stream. *(Returns 403 Forbidden if no qualifying application exists).*
-
----
-
-## 4. Job Descriptions & NLP (`/api/nlp`)
-
-### `POST /api/nlp/jd`
-**Description:** Creates a new Job Description. Extracts skills via LLM, embeds the text, and stores ownership.
-**Role Required:** COMPANY
-
-**Input (JSON Body):**
-```json
-{
-  "jd_name": "Senior Python Backend Engineer",
-  "job_description": "We need someone with 5+ years of FastAPI..."
-}
-```
-
-**Output:**
-```json
-{
-  "message": "Job description stored successfully.",
-  "jd_name": "Senior Python Backend Engineer",
-  "company_id": "company-uuid",
-  "essential_skills": ["Python", "FastAPI"],
-  "elective_skills": ["Docker", "AWS"],
-  "required_experience": 5.0
-}
-```
-
----
-
-### `GET /api/nlp/jd`
-**Description:** Lists all Job Descriptions owned by the logged-in Company.
-**Role Required:** COMPANY
-
-**Input:** *(None)*
-
-**Output:**
-```json
-{
-  "message": "Job descriptions retrieved successfully.",
-  "total": 1,
-  "jds": [
-    {
-      "jd_name": "Senior Python Backend Engineer",
-      "company_id": "company-uuid",
-      "essential_skills_count": 2,
-      "elective_skills_count": 2,
-      "required_experience": 5.0
-    }
-  ]
-}
-```
-
----
-
-### `PUT /api/nlp/jd`
-**Description:** Updates an existing Job Description. Overwrites the vector and re-extracts skills.
-**Role Required:** COMPANY
-
-**Input (JSON Body):**
-```json
-{
-  "jd_name": "Senior Python Backend Engineer",
-  "job_description": "Updated requirements text..."
-}
-```
-**Output:** Same as `POST /api/nlp/jd`.
-
----
-
-### `DELETE /api/nlp/jd/{jd_name}`
-**Description:** Deletes a Job Description from both PostgreSQL and ChromaDB.
-**Role Required:** COMPANY
-
-**Input (Path Parameter):**
-- `jd_name`: The name of the JD to delete.
-
-**Output:**
-```json
-{
-  "message": "Job description deleted successfully.",
-  "jd_name": "Senior Python Backend Engineer"
-}
-```
-
----
-
-### `POST /api/nlp/match`
-**Description:** Evaluates a JD against the Global Candidate Pool using Hybrid Search (Semantic + Keywords + Experience).
-**Role Required:** COMPANY
-
-**Input (JSON Body):**
-```json
-{
-  "jd_name": "Senior Python Backend Engineer", // Use stored JD
-  "job_description": "", // OR pass raw text
-  "top_k": 10
-}
-```
-
-**Output:**
-```json
-{
-  "signal": "match_success",
-  "total_matches": 10,
-  "results": [
-    {
-      "candidate_id": "file_id.pdf",
-      "customer_id": "customer-uuid",
-      "candidate_name": "John Doe",
-      "candidate_location": "New York",
-      "match_score": 87.5,
-      "semantic_score": 85.0,
-      "keyword_score": 90.0,
-      "experience_score": 100.0,
-      "matched_essential_skills": ["Python", "FastAPI"],
-      "missing_essential_skills": []
-    }
-  ]
-}
-```
-
----
-
-## 5. ATS Kanban Pipeline (`/api/ats`)
-
-The ATS (Applicant Tracking System) router manages the pipeline lifecycle of a Candidate applying to a Job Description. Valid pipeline stages are:
-`APPLIED`, `CONTACTED`, `CONSIDERED`, `INTERVIEWING`, `OFFER_SENT`, `HIRED`, `REJECTED`, `CANCELLED`.
-
-### `GET /api/ats/jobs/public`
-**Description:** Candidates can browse all publicly available job descriptions.
-**Role Required:** ANY (No auth required, or CUSTOMER)
-
-**Input:** *(None)*
-
-**Output:**
-```json
-{
-  "jobs": [
-    {
-      "jd_id": "job-uuid",
-      "jd_name": "Senior Python Backend Engineer",
-      "company_name": "Tech Corp",
-      "created_at": "2024-01-01T12:00:00.000Z"
-    }
-  ]
-}
-```
-
----
-
-### `POST /api/ats/jobs/{jd_id}/apply`
-**Description:** A Candidate applies directly to a public Job Description. Places them in the `APPLIED` stage.
-**Role Required:** CUSTOMER
-
-**Input (Path Parameter):** `jd_id`
-
-**Output:**
-```json
-{
-  "message": "Successfully applied to job.",
-  "application_id": "app-uuid"
-}
-```
-
----
-
-### `GET /api/ats/customer/applications`
-**Description:** Candidate views all jobs they have applied to or were contacted for.
-**Role Required:** CUSTOMER
-
-**Input:** *(None)*
-
-**Output:**
-```json
-{
-  "applications": [
-    {
-      "application_id": "app-uuid",
-      "company_name": "Tech Corp",
-      "jd_name": "Senior Python Backend Engineer",
-      "stage": "APPLIED",
-      "created_at": "2024-01-01T12:00:00.000Z"
-    }
-  ]
-}
-```
-
----
-
-### `PUT /api/ats/customer/applications/{application_id}/accept`
-**Description:** If a company reaches out first (candidate is in `CONTACTED` stage), the candidate can accept the invite to move to the `CONSIDERED` stage.
-**Role Required:** CUSTOMER
-
-**Input (Path Parameter):** `application_id`
-
-**Output:**
-```json
-{
-  "message": "Request accepted. You are now being considered.",
-  "stage": "CONSIDERED"
-}
-```
-
----
-
-### `POST /api/ats/company/contact`
-**Description:** Company finds a candidate via the AI Matcher and reaches out. Places the candidate in the `CONTACTED` stage.
-**Role Required:** COMPANY
-
-**Input (JSON Body):**
-```json
-{
-  "customer_id": "candidate-uuid-here",
-  "jd_id": "jd-database-id-here"
-}
-```
-
-**Output:**
-```json
-{
-  "message": "Candidate contacted successfully.",
-  "application_id": "app-uuid"
-}
-```
-
----
-
-### `GET /api/ats/board/{jd_id}`
-**Description:** Returns the Kanban board data for a specific job. Automatically groups all candidates into arrays based on their current stage.
-**Role Required:** COMPANY
-
-**Input (Path Parameter):** `jd_id`
-
-**Output:**
-```json
-{
-  "jd_name": "Senior Python Backend Engineer",
-  "board": {
-    "APPLIED": [
-      {
-        "application_id": "app-uuid",
-        "candidate_id": "candidate-uuid",
-        "candidate_name": "John Doe",
-        "match_score": null,
-        "created_at": "2024-01-01T12:00:00.000Z"
-      }
-    ],
-    "CONTACTED": [],
-    "CONSIDERED": [],
-    "INTERVIEWING": [],
-    "OFFER_SENT": [],
-    "HIRED": [],
-    "REJECTED": [],
-    "CANCELLED": []
-  }
-}
-```
-
----
-
-### `PUT /api/ats/board/{application_id}/move`
-**Description:** The Company drags and drops a candidate from one stage to another (e.g., from `INTERVIEWING` to `OFFER_SENT`).
-**Role Required:** COMPANY
-
-**Input (Path Parameter):** `application_id`
-
-**Input (JSON Body):**
-```json
-{
-  "stage": "OFFER_SENT"
-}
-```
-
-**Output:**
-```json
-{
-  "message": "Candidate moved to OFFER_SENT.",
-  "stage": "OFFER_SENT"
-}
-```
-
----
-
-## 6. Development & Utilities (`/api/dev`)
-
-### `DELETE /api/dev/reset-everything`
-**Description:** **🚨 DANGER - DANGER - DANGER 🚨** 
-Completely wipes the entire platform clean. It deletes all uploaded PDF files from the hard drive, drops all vectors from ChromaDB, and truncates every PostgreSQL table (wiping all users, JDs, applications, and profiles), then re-seeds the Job Types and Functions. 
-Use this to get a fresh start for testing.
-
-**Role Required:** ANY (No Auth Required)
-
-**Input:** *(None)*
-
-**Output:**
-```json
-{
-  "message": "System completely wiped and reset. Ready for clean testing!"
-}
-```
+### `DELETE /dev/reset-everything` — **no auth, dev only.** Wipes Chroma collections + `assets/files` + truncates PG (keeps `alembic_version`), reseeds taxonomy. → `{ message: "System completely wiped and reset. Ready for clean testing!" }`

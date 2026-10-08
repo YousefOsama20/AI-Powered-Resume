@@ -1,25 +1,28 @@
 # Helpers Directory Overview
 
-The `helpers` folder in this project serves as a central location for utility scripts and configuration management. Its primary role is to provide reusable helper functions and settings configurations, such as reading environment variables (via `.env`), which can be accessed consistently throughout the application (e.g., in controllers and routes).
+Reusable app-wide utilities: typed settings + auth crypto. Import via `from helpers.config import get_settings` / `from helpers.security import …`.
 
-## Files in `helpers/`
+## `config.py` — typed `.env` schema
 
-### 1. `config.py`
+`Settings(BaseSettings)` — every env var is typed; file resolved relative to `src/.env` (`Config.env_file = <src>/.env`). `get_settings()` is `lru_cache`d (read once).
 
-This file is responsible for loading and defining application-wide settings and configuration variables using Pydantic.
+| Group | Vars |
+|---|---|
+| App | `APP_NAME`, `APP_VERSION` (returned by `GET /welcome/`) |
+| DB | `DATABASE_URL` (postgres prod, sqlite dev) |
+| Auth | `JWT_SECRET_KEY`, `JWT_ALGORITHM` (e.g. `HS256`), `ACCESS_TOKEN_EXPIRE_MINUTES` (10080 = 7d) |
+| Files | `FILE_ALLOWED_TYPES[]` (pdf/msword/docx MIME), `FILE_MAX_SIZE` (MB), `FILE_DEFAULT_CHUNK_SIZE` (bytes per `aiofiles` write) |
+| ChromaDB | `VECTOR_DB_PATH`, `VECTOR_DB_COLLECTION` |
+| Embeddings | `EMBEDDING_MODEL_NAME` (e.g. `all-MiniLM-L6-v2`), `EMBEDDING_BATCH_SIZE` (=64) |
+| LLM (OpenAI-compatible; all nullable — empty disables LLM, heuristic fallback runs) | `GENERATION_BACKEND`, `GENERATION_API_KEY`, `GENERATION_API_URL`, `GENERATION_MODEL_ID`, `GENERATION_MAX_TOKENS`, `GENERATION_TEMPERATURE` |
+| Prompts | `PRIMARY_LANG`, `DEFAULT_LANG` (`en`) |
+| Misc | `INPUT_DAFAULT_MAX_CHARACTERS` (nullable legacy cap) |
 
-#### `Settings` (Class)
-- **What it does:** Inherits from `pydantic_settings.BaseSettings`. It defines the schema and types for all the environment variables and configuration properties used across the app (such as application metadata, file upload constraints, vector DB paths, and embedding model settings). It is configured to automatically load these values from a `.env` file.
-- **Role:** Main helper class (configuration schema).
-- **Where it is used:** Used as a type hint and schema definition for configuration. It is imported and utilized in:
-  - `src/controllers/BaseController.py`
-  - `src/routes/base.py`
-  - `src/routes/data.py`
+Used in: `controllers/BaseController` (`self.app_settings`), `routes/base|data`, `main.py` lifespan (LLM factory), `stores/llm/*`. Copy `src/.env.example → src/.env` then fill secrets.
 
-#### `get_settings` (Function)
-- **What it does:** Instantiates the `Settings` class and returns it. It is decorated with `functools.lru_cache()`, ensuring that the settings are only read from the `.env` file once and then cached for all subsequent calls, improving performance.
-- **Role:** Main helper function.
-- **Where it is used:** Used as the primary method to inject settings into routes and controllers. It is imported and utilized in:
-  - `src/controllers/BaseController.py` (Called during `__init__` to set `self.app_settings`)
-  - `src/routes/base.py` (Passed as a FastAPI `Depends` dependency in the endpoints)
-  - `src/routes/data.py` (Passed as a FastAPI `Depends` dependency in the endpoints)
+## `security.py` — passwords + JWT
+
+- `get_password_hash(password)` — bcrypt `gensalt` + `hashpw`, returns utf-8 str. Used by `POST /auth/register`.
+- `verify_password(plain, hashed)` — `bcrypt.checkpw` (utf-8 encode both). Used by `POST /auth/login`.
+- `create_access_token(data, expires_delta?)` — adds `exp` (default `ACCESS_TOKEN_EXPIRE_MINUTES`), `jose.jwt.encode` with `JWT_SECRET_KEY`/`JWT_ALGORITHM`. Payload is `{sub: user.id, role}`; verified by `routes/deps.get_current_user`.
+- Module-level `settings = get_settings()` (cached).
