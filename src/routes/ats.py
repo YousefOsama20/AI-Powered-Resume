@@ -206,8 +206,9 @@ async def list_my_applications(
         for app in apps:
             results.append({
                 "application_id": app.id,
-                "company_name": app.company.company_name,
-                "jd_name": app.job_description.jd_name,
+                "company_name": app.company.company_name if app.company else None,
+                "jd_id": app.jd_id,
+                "jd_name": app.job_description.jd_name if app.job_description else None,
                 "stage": app.stage.value,
                 "created_at": app.created_at.isoformat()
             })
@@ -240,6 +241,32 @@ async def accept_company_contact(
     except Exception as e:
         db.rollback()
         logger.error(f"Error accepting request: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.put("/customer/applications/{application_id}/decline")
+async def decline_company_contact(
+    application_id: str,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """Decline a company contact request, moves CONTACTED to CANCELLED. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+        app = db.query(JobApplication).filter_by(id=application_id, customer_id=customer_id).first()
+
+        if not app:
+            return JSONResponse(status_code=404, content={"message": "Application not found."})
+
+        if app.stage != PipelineStage.CONTACTED:
+            return JSONResponse(status_code=400, content={"message": "Can only decline applications in the CONTACTED stage."})
+
+        app.stage = PipelineStage.CANCELLED
+        db.commit()
+
+        return JSONResponse(content={"message": "Request declined.", "stage": app.stage.value})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error declining request: {e}")
         return JSONResponse(status_code=500, content={"message": "Internal server error."})
 
 # ---------------------------------------------------------

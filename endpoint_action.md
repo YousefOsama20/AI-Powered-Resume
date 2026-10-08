@@ -129,8 +129,9 @@ Always: `{ jd_id, jd_name, location, job_type{id,name}, job_function{id,name}, i
 With `Authorization` (candidate): adds `candidate_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[]` (detail page renders ✓ green / ✗ red).
 
 ### `POST /ats/jobs/{jd_id}/apply` (CUSTOMER) → 201 `{ message, application_id }` (400 if already in pipeline).
-### `GET /ats/customer/applications` (CUSTOMER) → `{ applications: [{ application_id, company_name, jd_name, stage, created_at }] }`
+### `GET /ats/customer/applications` (CUSTOMER) → `{ applications: [{ application_id, company_name, jd_id, jd_name, stage, created_at }] }` (includes company `CONTACTED` requests; candidate Applications page splits `CONTACTED` into a Requests section with Accept/Decline + job link via `jd_id`).
 ### `PUT /ats/customer/applications/{application_id}/accept` (CUSTOMER) — `CONTACTED → CONSIDERED`.
+### `PUT /ats/customer/applications/{application_id}/decline` (CUSTOMER) — `CONTACTED → CANCELLED` (400 unless `CONTACTED`, 404 if not owned).
 ### `POST /ats/company/contact` (COMPANY) `{ customer_id, jd_id }` → 201 (candidate enters `CONTACTED`).
 ### `GET /ats/board/{jd_id}` (COMPANY) → `{ jd_name, board: { APPLIED: [{application_id, candidate_id, candidate_name, candidate_email, candidate_phone, match_score, created_at}], CONTACTED: [], ... } }`
 ### `PUT /ats/board/{application_id}/move` (COMPANY) `{ stage: "INTERVIEWING" }` → `{ message, stage }`
