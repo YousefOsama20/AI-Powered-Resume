@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Jobright - AI Recruitment Platform",
+  title: "NextHire - AI Recruitment Platform",
   description: "AI-powered recruitment platform connecting top talent with amazing companies",
 };
 

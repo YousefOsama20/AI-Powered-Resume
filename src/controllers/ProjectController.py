@@ -22,4 +22,15 @@ class ProjectController(BaseController):
 
         return customer_dir
 
+    def get_avatar_path(self, profile_id: str):
+        # Get or create the avatar storage directory for a profile (customer or company).
+        # Type: Main function
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        avatars_dir = os.path.join(base_dir, "assets", "avatars", profile_id)
+
+        if not os.path.exists(avatars_dir):
+            os.makedirs(avatars_dir)
+
+        return avatars_dir
+
     

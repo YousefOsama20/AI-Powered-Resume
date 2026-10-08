@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import MatchRing from '@/components/MatchRing';
+import CandidatePreviewModal from '@/components/CandidatePreviewModal';
+import CandidateAvatar from '@/components/CandidateAvatar';
 import api from '@/lib/axios';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 
@@ -11,6 +13,7 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -41,8 +44,9 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
     try {
       await api.post('/ats/company/contact', { jd_id, customer_id: candidateId });
       alert('Candidate added to ATS Pipeline in CONTACTED stage!');
-      // Update UI
+      // Update UI (list + open modal, if any)
       setMatches(prev => prev.map(m => m.customer_id === candidateId ? { ...m, has_accepted_request: true } : m));
+      setSelected((prev: any) => prev && prev.customer_id === candidateId ? { ...prev, has_accepted_request: true } : prev);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to contact candidate');
     }
@@ -80,7 +84,6 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
             const overallMatch = Math.round(match.match_score || 0);
             const expMatch = Math.round(match.experience_score || 0);
             const skillMatch = Math.round(((match.keyword_score || 0) + (match.semantic_score || 0)) / 2);
-            const locMatch = Math.round(match.location_score || 0);
             const rowKey = match.candidate_id || match.file_id || match.customer_id;
 
             return (
@@ -112,8 +115,16 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
 
                   <div className="flex-1 p-6 lg:p-8">
                     <div className="flex justify-between items-start mb-6">
-                      <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">{match.candidate_name || 'Anonymous Candidate'}</h3>
+                      <div className="flex items-center gap-4">
+                        <CandidateAvatar photoUrl={match.candidate_photo_url} name={match.candidate_name} size={56} />
+                        <div>
+                        <h3
+                          className="text-2xl font-bold text-gray-900 mb-2 hover:text-[#12b388] cursor-pointer transition-colors"
+                          onClick={() => setSelected(match)}
+                          title="View full candidate breakdown"
+                        >
+                          {match.candidate_name || 'Anonymous Candidate'}
+                        </h3>
                         <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                           <span className="flex items-center gap-1">📍 {match.candidate_location || 'Remote'}</span>
                           {(match.file_name || match.file_id) && (
@@ -123,15 +134,21 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
                             <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">{match.candidate_experience} yrs exp</span>
                           )}
                         </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                       <MatchRing percentage={skillMatch} label="Skills" size={64} />
                       <MatchRing percentage={expMatch} label="Experience" size={64} />
-                      <MatchRing percentage={locMatch} label="Location" size={64} />
                       <MatchRing percentage={Math.round(match.job_type_score || 0)} label="Job Type" size={64} />
                     </div>
+                    <button
+                      onClick={() => setSelected(match)}
+                      className="mt-4 text-sm font-bold text-[#12b388] hover:underline"
+                    >
+                      View full breakdown →
+                    </button>
                   </div>
                 </div>
               </div>
@@ -139,6 +156,13 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
           })
         )}
       </div>
+      {selected && (
+        <CandidatePreviewModal
+          match={selected}
+          onClose={() => setSelected(null)}
+          onContact={handleContact}
+        />
+      )}
     </DashboardLayout>
   );
 }

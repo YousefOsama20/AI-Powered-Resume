@@ -23,6 +23,43 @@ class DataController(BaseController):
 
         return True, ResponseSignal.FILE_VALIDATED_SUCCESS.value
 
+    ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
+    AVATAR_MAX_SIZE_MB = 5
+
+    def validate_image_file(self, file: UploadFile, max_size_mb: int = AVATAR_MAX_SIZE_MB):
+        # Validate a profile photo upload (type + size). | Both
+        # Type: Main function
+        if file.content_type not in self.ALLOWED_IMAGE_TYPES:
+            return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
+
+        size = getattr(file, "size", None)
+        if size is not None and size > max_size_mb * self.size_scale:
+            return False, ResponseSignal.FILE_SIZE_EXCEEDED.value
+
+        return True, ResponseSignal.FILE_VALIDATED_SUCCESS.value
+
+    def generate_unique_avatar_filepath(self, orig_file_name: str, profile_id: str):
+        # Generate a unique path for a profile avatar. | Both
+        # Type: Main function
+        random_key = self.generate_random_string()
+        avatar_dir = ProjectController().get_avatar_path(profile_id=profile_id)
+
+        cleaned_file_name = self.get_clean_file_name(orig_file_name=orig_file_name)
+
+        new_file_path = os.path.join(
+            avatar_dir,
+            random_key + "_" + cleaned_file_name
+        )
+
+        while os.path.exists(new_file_path):
+            random_key = self.generate_random_string()
+            new_file_path = os.path.join(
+                avatar_dir,
+                random_key + "_" + cleaned_file_name
+            )
+
+        return new_file_path
+
     def generate_unique_filepath(self, orig_file_name: str, customer_id: str):
         # Type: Main function
 

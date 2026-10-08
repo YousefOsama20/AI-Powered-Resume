@@ -1,4 +1,4 @@
-# AI-Powered Resume ATS — Jobright Platform
+# AI-Powered Resume ATS — NextHire Platform
 
 > **Version:** 3.1 · **Stack:** FastAPI · PostgreSQL · ChromaDB · sentence-transformers · spaCy · LLM (OpenAI-compatible) · Next.js 16 / React 19 / Tailwind 4
 
@@ -8,7 +8,7 @@
 2. [Architecture Overview](#2-architecture-overview)
 3. [Repository Layout](#3-repository-layout)
 4. [Global Talent Pool + Direct-Apply Model](#4-global-talent-pool--direct-apply-model)
-5. [Frontend (Jobright UI)](#5-frontend-jobright-ui)
+5. [Frontend (NextHire UI)](#5-frontend-nexthire-ui)
 6. [Environment Variables & API Keys](#6-environment-variables--api-keys)
 7. [API Endpoints (real prefixes)](#7-api-endpoints-real-prefixes)
 8. [How to Run Locally](#8-how-to-run-locally)
@@ -21,7 +21,7 @@
 
 ## 1. What Is This Project?
 
-**AI-Powered Resume / Jobright** connects **Candidates (CUSTOMER)** with **Companies (COMPANY)** through an AI-driven ATS with two discovery directions:
+**AI-Powered Resume / NextHire** connects **Candidates (CUSTOMER)** with **Companies (COMPANY)** through an AI-driven ATS with two discovery directions:
 
 - **Company → Candidates:** a JD is matched against the entire global CV pool (`POST /nlp/match`), then the company contacts candidates into a Kanban pipeline.
 - **Candidate → Jobs:** a CV is reverse-matched against all public JDs (`GET /nlp/recommend-jobs`), with honest skill-overlap UI (green = in your CV, red = missing).
@@ -32,7 +32,7 @@ Core capabilities:
 - 🗄️ **PostgreSQL (SQLAlchemy):** Users, `CustomerProfile`, `CandidateDocument` (multi-CV, `is_primary`), `CompanyProfile` (website/industry/location), `JobDescription` ownership + `job_type_id`/`job_function_id`, `JobApplication` pipeline, `JobType`/`JobFunction` taxonomy with M2M candidate preferences.
 - 📤 **CV ingestion:** PDF/DOCX upload → section segmentation → chunking → skill + experience extraction → embeddings → ChromaDB (`POST /data/upload` → `POST /nlp/index`).
 - 🧠 **Vector engine:** local `sentence-transformers` embeddings; ChromaDB collections `candidates` (chunks) + `jds` (one doc per JD, company-scoped id `{company_id}::{jd_name}`).
-- 🔍 **Hybrid matching:** 25% semantic + 25% keyword (75/25 essential/elective + strict mode) + 20% experience + 10% location + 10% job-type + 10% job-function. Both directions return `matched/missing_essential/elective`.
+- 🔍 **Hybrid matching:** 30% semantic + 30% keyword (75/25 essential/elective + strict mode) + 20% experience + 10% job-type + 10% job-function. Both directions return `matched/missing_essential/elective`.
 - 🧹 **SkillNormalizer:** canonical aliases + plural handling + fuzzy fallback so `rest apis == rest api`, `http protocols == http`, `linux commands == linux`, `problem-solving skills == problem solving` (`src/controllers/SkillNormalizer.py`).
 - 🖥️ **Next.js frontend:** split-screen auth, candidate onboarding with **unlimited multi-select Job Functions** (`MultiSelectDropdown.tsx`), dashboards, job detail with personalized overlap, company JD creator + AI matcher + Kanban ATS.
 - 🛠️ **Ops:** `GET /nlp/debug-match` (raw vs canonical skill audit), `python -m scripts.reindex_skills` (metadata-only re-canonicalization), `DELETE /dev/reset-everything` (dev wipe + reseed).
@@ -105,7 +105,7 @@ AI_powered_resume/
 
 ---
 
-## 5. Frontend (Jobright UI)
+## 5. Frontend (NextHire UI)
 
 - **Auth:** `/login`, `/register` — role cards (Candidate/Company), auto-login + redirect to the right onboarding.
 - **Candidate:** `/candidate/onboarding` (step 1: `MultiSelectDropdown` for Job Functions — unlimited — + chip-grid Job Types + location; step 2: CV upload; step 3: scanning animation) → `/candidate/dashboard` (Recommended feed, true keyword Skill ring + tooltip with essential/elective/semantic, green `You have` / red `Missing` chips, amber `Low skill overlap` banner under 30%) → `/candidate/jobs/[jd_id]` (Essential vs Nice-to-have with ✓/✗ personalization) → `/candidate/profile` (same multi-select), `/candidate/applications`, `/candidate/resumes`.
@@ -219,14 +219,14 @@ python -m scripts.reindex_skills             # metadata-only fix, no re-embed
 Both `match_candidates` (company) and `recommend_jobs` (candidate) share one formula (`src/controllers/MatchController.py`):
 
 ```text
-hybrid = 0.25*semantic + 0.25*keyword + 0.20*experience
-       + 0.10*location + 0.10*job_type + 0.10*job_function
+hybrid = 0.30*semantic + 0.30*keyword + 0.20*experience
+       + 0.10*job_type + 0.10*job_function
 ```
 
-- **Semantic (25%):** cosine similarity of `sentence-transformers` embeddings (JD vs CV-chunk average).
-- **Keyword (25%):** essential/elective split; `essential*0.75 + elective*0.25`; **strict mode** — elective ignored when `essential_score < 0.5`; empty-essential JDs score `essential=1.0`.
+- **Semantic (30%):** cosine similarity of `sentence-transformers` embeddings (JD vs CV-chunk average).
+- **Keyword (30%):** essential/elective split; `essential*0.75 + elective*0.25`; **strict mode** — elective ignored when `essential_score < 0.5`; empty-essential JDs score `essential=1.0`.
 - **Experience (20%):** `ExperienceController` required-vs-actual with gap reporting.
-- **Location/Type/Function (10% each):** exact-or-empty match (`empty == 1.0`); candidate prefs are M2M lists, so multi-select works natively.
+- **Type/Function (10% each):** exact-or-empty match (`empty == 1.0`); candidate prefs are M2M lists, so multi-select works natively. Location text is display-only (no location score).
 - Responses include `match/semantic/keyword/essential/elective/experience/location/job_type/job_function` scores + `matched/missing_essential/elective` + `required_experience/candidate_experience/experience_gap`. Orphan Chroma vectors without PG profiles are skipped and counted (`orphan_skipped`).
 
 ---

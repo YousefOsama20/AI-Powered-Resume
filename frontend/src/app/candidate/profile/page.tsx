@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import MultiSelectDropdown from '@/components/MultiSelectDropdown';
+import AvatarUpload from '@/components/AvatarUpload';
 import api from '@/lib/axios';
 
 export default function CandidateProfile() {
@@ -14,6 +15,9 @@ export default function CandidateProfile() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoVersion, setPhotoVersion] = useState(0);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     api.get('/profile/taxonomy').then(res => setTaxonomy(res.data)).catch(console.error);
@@ -22,6 +26,7 @@ export default function CandidateProfile() {
         const data = res.data;
         setPhone(data.phone || '');
         setLocation(data.location || '');
+        setPhotoUrl(data.photo_url || null);
         setSelectedTypes((data.job_types || []).map((t: any) => t.id));
         setSelectedFunctions((data.job_functions || []).map((f: any) => f.id));
         setLoading(false);
@@ -38,6 +43,34 @@ export default function CandidateProfile() {
 
   const toggleFunction = (id: string) => {
     setSelectedFunctions(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/profile/customer/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setPhotoUrl(res.data.photo_url || '/profile/customer/photo');
+      setPhotoVersion((v) => v + 1);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to upload photo. Use JPG, PNG or WebP under 5MB.');
+    }
+    setUploadingPhoto(false);
+  };
+
+  const handlePhotoRemove = async () => {
+    try {
+      await api.delete('/profile/customer/photo');
+      setPhotoUrl(null);
+      setPhotoVersion((v) => v + 1);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to remove photo');
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -75,6 +108,17 @@ export default function CandidateProfile() {
           </div>
         ) : (
         <form onSubmit={handleSave} className="space-y-8">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
+            <h3 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-4">Profile Photo</h3>
+            <AvatarUpload
+              photoUrl={photoUrl ? `${photoUrl}?v=${photoVersion}` : null}
+              fallbackLabel="Candidate"
+              uploading={uploadingPhoto}
+              onUpload={handlePhotoUpload}
+              onRemove={handlePhotoRemove}
+            />
+          </div>
+
           <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
             <h3 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-4">Personal Information</h3>
             <div className="grid grid-cols-2 gap-6">

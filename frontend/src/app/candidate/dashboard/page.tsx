@@ -73,7 +73,6 @@ export default function CandidateDashboard() {
             // these were averaged, which hid the real skill gap (e.g. 7%).
             const skillMatch = Math.round(job.keyword_score ?? 0);
             const semMatch = Math.round(job.semantic_score ?? 0);
-            const locMatch = Math.round(job.location_score || 0);
             const lowSkill = skillMatch < 30;
             const matchedEss: string[] = job.matched_essential_skills || [];
             const missingEss: string[] = job.missing_essential_skills || [];
@@ -85,7 +84,7 @@ export default function CandidateDashboard() {
                   {/* Left Content */}
                   <div className="flex-1 pr-8">
                     <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1 rounded-full w-max mb-4 ${lowSkill ? 'text-amber-700 bg-amber-100' : 'text-[#12b388] bg-[#12b388]/10'}`}>
-                      {lowSkill ? '⚠️ Low skill overlap — strong on exp/location' : '✨ Why This Job Is A Match'}
+                      {lowSkill ? '⚠️ Low skill overlap — strong on experience' : '✨ Why This Job Is A Match'}
                     </div>
                     <h3 className="text-xl font-bold text-gray-900">
                       <Link href={`/candidate/jobs/${job.jd_id}`} className="hover:text-[#12b388] transition-colors">
@@ -100,7 +99,6 @@ export default function CandidateDashboard() {
                       <div title={`Keyword ${skillMatch}% (essential ${Math.round(job.essential_score ?? 0)}%, elective ${Math.round(job.elective_score ?? 0)}%) • Semantic ${semMatch}%`}>
                         <MatchRing percentage={skillMatch} label="Skill Match" />
                       </div>
-                      <MatchRing percentage={locMatch} label="Location Match" />
                     </div>
                     {/* Honest skill breakdown */}
                     {(matchedEss.length > 0 || missingEss.length > 0) && (

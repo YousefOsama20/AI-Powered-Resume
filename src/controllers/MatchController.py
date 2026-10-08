@@ -2,7 +2,7 @@
 MatchController
 ───────────────
 Implements the Hybrid Ranking Engine:
-Semantic Score + Keyword Score + Experience Score + Location + Job Type + Job Function.
+Semantic Score + Keyword Score + Experience Score + Job Type + Job Function.
 
 Skills are classified into Essential and Elective.
 """
@@ -61,7 +61,6 @@ class MatchController:
                 jd_sql = db.query(JobDescription).filter_by(jd_name=jd_name, company_id=company_id).first()
             if jd_sql is None:
                 jd_sql = db.query(JobDescription).filter_by(jd_name=jd_name).first()
-        jd_location = jd_sql.location if jd_sql else None
         jd_type_id = jd_sql.job_type_id if jd_sql else None
         jd_function_id = jd_sql.job_function_id if jd_sql else None
 
@@ -243,29 +242,24 @@ class MatchController:
 
             experience_gap = round(req_exp - candidate_exp, 1) if (req_exp and candidate_exp < req_exp) else 0
 
-            # Database Enrichment (Location, Type, Function)
-            loc_score = 0.0
+            # Database Enrichment (Type, Function)
             type_score = 0.0
             func_score = 0.0
-            
+
             profile = db.query(CustomerProfile).filter_by(id=data["customer_id"]).first()
             if profile and jd_sql:
-                # Location (Exact Match or Not provided = 1.0)
-                if not jd_location or not profile.location or jd_location.lower() == profile.location.lower():
-                    loc_score = 1.0
-                
                 # Job Type
                 profile_types = [t.id for t in profile.job_types]
                 if not jd_type_id or jd_type_id in profile_types:
                     type_score = 1.0
-                    
+
                 # Job Function
                 profile_funcs = [f.id for f in profile.job_functions]
                 if not jd_function_id or jd_function_id in profile_funcs:
                     func_score = 1.0
 
-            # Weighted Hybrid Score: 25% Semantic, 25% Keyword, 20% Exp, 10% Loc, 10% Type, 10% Func
-            hybrid_score = (avg_semantic * 0.25) + (keyword_score * 0.25) + (exp_score * 0.20) + (loc_score * 0.10) + (type_score * 0.10) + (func_score * 0.10)
+            # Weighted Hybrid Score: 30% Semantic, 30% Keyword, 20% Exp, 10% Type, 10% Func
+            hybrid_score = (avg_semantic * 0.30) + (keyword_score * 0.30) + (exp_score * 0.20) + (type_score * 0.10) + (func_score * 0.10)
             
             if _use_normalizer:
                 missing_essential = sorted(missing_ess)
@@ -288,7 +282,6 @@ class MatchController:
                 "essential_score": round(essential_score * 100, 2),
                 "elective_score": round(elective_score * 100, 2),
                 "experience_score": round(exp_score * 100, 2),
-                "location_score": round(loc_score * 100, 2),
                 "job_type_score": round(type_score * 100, 2),
                 "job_function_score": round(func_score * 100, 2),
                 "required_experience": req_exp,
@@ -467,13 +460,9 @@ class MatchController:
             exp_score = self.experience.calculate_experience_score(required_exp if required_exp > 0 else None, candidate_exp)
             
             # Enrich Scores
-            loc_score = 0.0
             type_score = 0.0
             func_score = 0.0
-            
-            if not jd_sql.location or not profile.location or jd_sql.location.lower() == profile.location.lower():
-                loc_score = 1.0
-                
+
             profile_types = [t.id for t in profile.job_types]
             if not jd_sql.job_type_id or jd_sql.job_type_id in profile_types:
                 type_score = 1.0
@@ -482,7 +471,7 @@ class MatchController:
             if not jd_sql.job_function_id or jd_sql.job_function_id in profile_funcs:
                 func_score = 1.0
                 
-            hybrid_score = (semantic_score * 0.25) + (keyword_score * 0.25) + (exp_score * 0.20) + (loc_score * 0.10) + (type_score * 0.10) + (func_score * 0.10)
+            hybrid_score = (semantic_score * 0.30) + (keyword_score * 0.30) + (exp_score * 0.20) + (type_score * 0.10) + (func_score * 0.10)
             
             ranked_jobs.append({
                 "jd_id": jd_sql.id,
@@ -494,7 +483,6 @@ class MatchController:
                 "essential_score": round(essential_score * 100, 2),
                 "elective_score": round(elective_score * 100, 2),
                 "experience_score": round(exp_score * 100, 2),
-                "location_score": round(loc_score * 100, 2),
                 "job_type_score": round(type_score * 100, 2),
                 "job_function_score": round(func_score * 100, 2),
                 "required_experience": required_exp,

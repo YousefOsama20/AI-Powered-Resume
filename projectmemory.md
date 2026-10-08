@@ -1,6 +1,6 @@
-# Jobright AI Copilot - Project Memory & State
+# NextHire AI Copilot - Project Memory & State
 
-Comprehensive tracker for the AI-Powered Resume & ATS Platform (Jobright): architecture, what shipped, key fixes, roadmap.
+Comprehensive tracker for the AI-Powered Resume & ATS Platform (NextHire): architecture, what shipped, key fixes, roadmap.
 
 ## 1. Project Overview
 
@@ -15,7 +15,7 @@ AI recruitment platform with two discovery directions:
 *   **Databases:**
     *   **PostgreSQL:** Users, Customer/Company profiles, CandidateDocument (multi-CV, `is_primary`), JobDescription ownership (`is_public/location/job_type_id/job_function_id`), JobApplication pipeline, JobType/JobFunction + M2M prefs.
     *   **ChromaDB:** `candidates` chunks (`skills, experience_years, file_id, customer_id, section`) + `jds` single-doc per JD (company-scoped `{company_id}::{jd_name}`, `essential_skills/elective_skills/required_experience`).
-*   **AI/NLP:** sentence-transformers embeddings, spaCy `en_core_web_sm` taxonomy matcher, LLM extraction (OpenAI-compatible, canonical prompts) with heuristic fallback, shared hybrid scorer `0.25 sem + 0.25 kw + 0.20 exp + 0.10 loc + 0.10 type + 0.10 func` (+ strict mode), `SkillNormalizer` canonical layer (aliases/plurals/fuzzy ≥0.88).
+*   **AI/NLP:** sentence-transformers embeddings, spaCy `en_core_web_sm` taxonomy matcher, LLM extraction (OpenAI-compatible, canonical prompts) with heuristic fallback, shared hybrid scorer `0.30 sem + 0.30 kw + 0.20 exp + 0.10 type + 0.10 func` (+ strict mode; location is display-only), `SkillNormalizer` canonical layer (aliases/plurals/fuzzy ≥0.88).
 
 ## 3. Features Implemented & Development History
 

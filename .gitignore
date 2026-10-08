@@ -22,5 +22,6 @@ env/
 # ── Heavy local data (never commit) ────────────────────────────────────────
 src/assets/vectordb/
 src/assets/files/
+src/assets/avatars/
 *.db
 *.sqlite3

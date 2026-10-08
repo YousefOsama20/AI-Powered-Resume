@@ -31,7 +31,7 @@ export default function Login() {
   };
 
   return (
-    <SplitScreenLayout heading="Welcome back to **Jobright**">
+    <SplitScreenLayout heading="Welcome back to **NextHire**">
       <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md mx-auto">
         {error && <div className="p-3 bg-red-50 text-red-500 rounded-lg text-sm">{error}</div>}
         

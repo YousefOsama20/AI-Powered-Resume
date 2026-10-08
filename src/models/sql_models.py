@@ -58,6 +58,7 @@ class CustomerProfile(Base):
     name = Column(String, nullable=False)
     phone = Column(String)
     location = Column(String)
+    photo_path = Column(String, nullable=True)
 
     user = relationship("User", back_populates="customer_profile")
     job_types = relationship("JobType", secondary=customer_job_type)
@@ -88,6 +89,7 @@ class CompanyProfile(Base):
     website = Column(String, nullable=True)
     industry = Column(String, nullable=True)
     location = Column(String, nullable=True)
+    photo_path = Column(String, nullable=True)
 
     user = relationship("User", back_populates="company_profile")
     applications = relationship("JobApplication", back_populates="company", foreign_keys="[JobApplication.company_id]")
@@ -148,3 +150,20 @@ class JobApplication(Base):
     customer = relationship("CustomerProfile", foreign_keys=[customer_id], back_populates="applications")
     job_description = relationship("JobDescription", back_populates="applications")
     document = relationship("CandidateDocument", back_populates="applications")
+
+class ApplyAdviceCache(Base):
+    """
+    Cached per-candidate-per-JD LLM apply advice.
+    Cache key is (customer_id, jd_id, document_id): a new CV upload
+    (new document) naturally invalidates old advice.
+    """
+    __tablename__ = "apply_advice_cache"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id = Column(String, ForeignKey("customer_profiles.id"), nullable=False)
+    jd_id = Column(String, ForeignKey("job_descriptions.id"), nullable=False)
+    document_id = Column(String, ForeignKey("candidate_documents.id"), nullable=False)
+    advice_json = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

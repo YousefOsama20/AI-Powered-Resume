@@ -14,7 +14,7 @@ Single source of truth so JD free-form and CV taxonomy strings compare equally.
 
 ## `MatchController.py` — hybrid ranker (both directions)
 - `__init__` — wires VectorDB, Embedding, Extraction, Experience, LLMExtraction, JD controllers.
-- `match_candidates(db, customer_id?, job_description?, jd_name?, top_k≤50, company_id?) -> (results, jd_skills)` — **company side.** Resolves JD (company-scoped `{company_id}::{jd_name}` first), canonicalizes skills, pulls up to 5000 chunks (whole pool, not top-100), groups by `file_id`, scores: `hybrid = .25 sem + .25 kw + .20 exp + .10 loc + .10 type + .10 func`; collapses to best-row-per-customer; skips orphan vectors (no PG profile). Used by `POST /nlp/match`.
+- `match_candidates(db, customer_id?, job_description?, jd_name?, top_k≤50, company_id?) -> (results, jd_skills)` — **company side.** Resolves JD (company-scoped `{company_id}::{jd_name}` first), canonicalizes skills, pulls up to 5000 chunks (whole pool, not top-100), groups by `file_id`, scores: `hybrid = .30 sem + .30 kw + .20 exp + .10 type + .10 func`; collapses to best-row-per-customer; skips orphan vectors (no PG profile). Used by `POST /nlp/match`. Location text is display-only (no location score).
 - `recommend_jobs(db, document_id, top_k) -> [jobs]` — **candidate side.** Loads primary `CandidateDocument`, averages its chunk embeddings, queries `jds` (`top_k*3` for re-rank), filters `is_public==1`, same keyword/strict-mode + experience + loc/type/func enrichment. Returns per-JD scores **plus** `matched/missing_essential/elective[]` + `candidate_skills[]` (dashboard chips). Used by `GET /nlp/recommend-jobs`.
 
 ## `JDController.py` (`JD_COLLECTION = "jds"`)

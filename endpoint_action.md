@@ -39,7 +39,7 @@ Any. JSON body (not form): `{ "email": "...", "password": "..." }` → `{ "acces
 
 ### `GET /profile/customer` (CUSTOMER)
 ```json
-{ "email": "...", "name": "...", "phone": null, "location": "Anywhere in the US",
+{ "email": "...", "name": "...", "phone": null, "location": " US",
   "job_types": [{"id": "...", "name": "..."}], "job_functions": [{"id": "...", "name": "..."}] }
 ```
 
@@ -107,13 +107,13 @@ LLM classified skills → canonical → embed → Chroma id `{company_id}::{jd_n
 → `{ signal: "match_success", company_id, jd_skills: {essential[], elective[]}, total_matches, orphan_skipped, results: [{
   candidate_id, file_id, customer_id, candidate_name, candidate_location, file_name, document_id, has_accepted_request,
   match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score,
-  location_score, job_type_score, job_function_score,
+  job_type_score, job_function_score,
   required_experience, candidate_experience, experience_gap,
   matched_essential_skills[], matched_elective_skills[], missing_essential_skills[], missing_elective_skills[], extracted_skills[] }] }`
-Weights: `0.25 sem + 0.25 kw + 0.20 exp + 0.10 loc + 0.10 type + 0.10 func`. Keyword: `ess*0.75+ele*0.25`, strict mode drops elective when `ess<0.5`.
+Weights: `0.30 sem + 0.30 kw + 0.20 exp + 0.10 type + 0.10 func`. Keyword: `ess*0.75+ele*0.25`, strict mode drops elective when `ess<0.5`. Location text is display-only (no location score).
 
 ### `GET /nlp/recommend-jobs?document_id=&top_k=10` (CUSTOMER) — reverse-match primary CV vs public JDs.
-→ `{ recommended_jobs: [{ jd_id, jd_name, company_name, match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score, location_score, job_type_score, job_function_score, required_experience, essential_skills[], elective_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[], candidate_skills[] }] }`
+→ `{ recommended_jobs: [{ jd_id, jd_name, company_name, match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score, job_type_score, job_function_score, required_experience, essential_skills[], elective_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[], candidate_skills[] }] }`
 Dashboard renders Skill ring = `keyword_score` (tooltip adds essential/elective/semantic).
 
 ### `GET /nlp/debug-match?jd_id=&document_id=` (CUSTOMER, own CV)
@@ -129,8 +129,10 @@ Always: `{ jd_id, jd_name, location, job_type{id,name}, job_function{id,name}, i
 With `Authorization` (candidate): adds `candidate_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[]` (detail page renders ✓ green / ✗ red).
 
 ### `POST /ats/jobs/{jd_id}/apply` (CUSTOMER) → 201 `{ message, application_id }` (400 if already in pipeline).
-### `GET /ats/customer/applications` (CUSTOMER) → `{ applications: [{ application_id, company_name, jd_name, stage, created_at }] }`
+### `GET /ats/jobs/{jd_id}/apply-advice?force=` (CUSTOMER) — LLM verdict `APPLY|MAYBE|SKIP` + `score_0_100/reason/strengths/gaps/two_week_plan/interview_tips`, cached per CV+JD in `apply_advice_cache` (`?force=1` regenerates). 400 no CV, 503 LLM unconfigured, 502 bad LLM output. Job page renders it via `ApplyAdviceCard`.
+### `GET /ats/customer/applications` (CUSTOMER) → `{ applications: [{ application_id, company_name, jd_id, jd_name, stage, created_at }] }` (includes company `CONTACTED` requests; candidate Applications page splits `CONTACTED` into a Requests section with Accept/Decline + job link via `jd_id`).
 ### `PUT /ats/customer/applications/{application_id}/accept` (CUSTOMER) — `CONTACTED → CONSIDERED`.
+### `PUT /ats/customer/applications/{application_id}/decline` (CUSTOMER) — `CONTACTED → CANCELLED` (400 unless `CONTACTED`, 404 if not owned).
 ### `POST /ats/company/contact` (COMPANY) `{ customer_id, jd_id }` → 201 (candidate enters `CONTACTED`).
 ### `GET /ats/board/{jd_id}` (COMPANY) → `{ jd_name, board: { APPLIED: [{application_id, candidate_id, candidate_name, candidate_email, candidate_phone, match_score, created_at}], CONTACTED: [], ... } }`
 ### `PUT /ats/board/{application_id}/move` (COMPANY) `{ stage: "INTERVIEWING" }` → `{ message, stage }`
