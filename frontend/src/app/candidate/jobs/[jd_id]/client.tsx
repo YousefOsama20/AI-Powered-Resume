@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import ApplyAdviceCard from '@/components/ApplyAdviceCard';
 import api from '@/lib/axios';
 import { MapPin, Briefcase, Building2, Globe, ArrowLeft } from 'lucide-react';
 
@@ -239,6 +240,8 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
             </div>
           )}
         </div>
+
+        <ApplyAdviceCard jd_id={jd_id} />
       </div>
     </DashboardLayout>
   );

@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+import json
 import logging
 
 from stores.db.database import get_db
-from models.sql_models import User, JobApplication, JobDescription, PipelineStage, CustomerProfile
+from models.sql_models import (
+    User, JobApplication, JobDescription, PipelineStage, CustomerProfile,
+    CandidateDocument, ApplyAdviceCache,
+)
 from routes.deps import get_current_company, get_current_customer
 from .schemes.requests import CreateRequest, UpdateRequestStatus, MoveCandidate
 
@@ -267,6 +271,168 @@ async def decline_company_contact(
     except Exception as e:
         db.rollback()
         logger.error(f"Error declining request: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+# ---------------------------------------------------------
+# CANDIDATE AI ADVICE
+# ---------------------------------------------------------
+
+@ats_router.get("/jobs/{jd_id}/apply-advice")
+async def get_apply_advice(
+    jd_id: str,
+    force: int = 0,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """LLM verdict on whether the candidate should apply. Cached per CV+JD. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+        jd = db.query(JobDescription).filter_by(id=jd_id, is_public=1).first()
+        if not jd:
+            return JSONResponse(status_code=404, content={"message": "Job not found."})
+
+        doc = (
+            db.query(CandidateDocument)
+            .filter_by(customer_id=customer_id, is_primary=1).first()
+            or db.query(CandidateDocument)
+            .filter_by(customer_id=customer_id).first()
+        )
+        if not doc:
+            return JSONResponse(status_code=400, content={"message": "Upload a CV first to get AI advice."})
+
+        # Cache lookup (skipped with ?force=1)
+        if not force:
+            cached = db.query(ApplyAdviceCache).filter_by(
+                customer_id=customer_id, jd_id=jd_id, document_id=doc.id
+            ).first()
+            if cached:
+                try:
+                    return JSONResponse(content={
+                        "advice": json.loads(cached.advice_json),
+                        "cached": True,
+                        "created_at": cached.created_at.isoformat() if cached.created_at else None,
+                    })
+                except Exception:
+                    pass  # fall through and regenerate
+
+        from controllers import JDController
+        jd_data = JDController().get_jd(jd.jd_name, company_id=jd.company_id)
+        if not jd_data:
+            return JSONResponse(status_code=404, content={"message": "Job details not found in vector store."})
+
+        skills = jd_data.get("skills", {}) or {}
+        essential = list(skills.get("essential", []) or [])
+        elective = list(skills.get("elective", []) or [])
+        if not essential and not elective and jd_data.get("job_description"):
+            try:
+                from controllers import ExtractionController
+                fallback = ExtractionController().extract_classified_skills(
+                    jd_data.get("job_description") or ""
+                )
+                essential = list(fallback.get("essential", []) or [])
+                elective = list(fallback.get("elective", []) or [])
+            except Exception as repair_err:
+                logger.warning(f"[Advice] skill fallback failed for JD {jd_id}: {repair_err}")
+        required_experience = jd_data.get("required_experience", 0.0) or 0.0
+        job_description = jd_data.get("job_description") or ""
+
+        from controllers import VectorDBController
+        from controllers.VectorDBController import CANDIDATE_COLLECTION
+        from controllers.SkillNormalizer import (
+            normalize_skill as _canon_one,
+            match_skills as _match_skills,
+        )
+        coll = VectorDBController()._get_collection(CANDIDATE_COLLECTION)
+        cdata = coll.get(where={"file_id": doc.vector_id}, include=["metadatas"])
+        cset = set()
+        candidate_experience = 0.0
+        for meta in (cdata.get("metadatas") or []):
+            for s in (meta.get("skills") or "").split(","):
+                v = _canon_one(s)
+                if v:
+                    cset.add(v)
+            try:
+                candidate_experience = max(candidate_experience, float(meta.get("experience_years", 0) or 0))
+            except Exception:
+                pass
+        candidate_skills = sorted(cset)
+        matched_essential, missing_essential, _ = _match_skills(cset, essential)
+        matched_elective, missing_elective, _ = _match_skills(cset, elective)
+
+        from controllers import LLMExtractionController
+        llm_extraction = LLMExtractionController()
+        if not llm_extraction.is_available:
+            return JSONResponse(
+                status_code=503,
+                content={"message": "AI advice unavailable (LLM not configured)."},
+            )
+
+        from stores.llm.templates.template_parser import TemplateParser
+        from helpers.config import get_settings
+        settings = get_settings()
+        parser = TemplateParser(language=settings.PRIMARY_LANG, default_language=settings.DEFAULT_LANG)
+        system_prompt = parser.get("apply_advice", "system_prompt")
+        user_prompt = parser.get("apply_advice", "user_prompt", vars={
+            "jd_name": jd.jd_name,
+            "company_name": jd.company.company_name if jd.company else "",
+            "location": jd.location or "",
+            "required_experience": str(required_experience),
+            "candidate_experience": str(candidate_experience),
+            "essential_skills": ", ".join(essential) or "not specified",
+            "elective_skills": ", ".join(elective) or "none",
+            "candidate_skills": ", ".join(candidate_skills) or "none",
+            "matched_essential": ", ".join(matched_essential) or "none",
+            "missing_essential": ", ".join(missing_essential) or "none",
+            "matched_elective": ", ".join(matched_elective) or "none",
+            "job_description": job_description[:4000],
+        })
+        if not system_prompt or not user_prompt:
+            return JSONResponse(status_code=500, content={"message": "Advice prompts not found."})
+
+        from stores.llm import LLMProvider
+        provider = LLMProvider(
+            api_key=settings.GENERATION_API_KEY,
+            api_url=settings.GENERATION_API_URL,
+            model_id=settings.GENERATION_MODEL_ID,
+            max_tokens=settings.GENERATION_MAX_TOKENS,
+            temperature=settings.GENERATION_TEMPERATURE,
+        )
+        raw = provider.generate(system_prompt=system_prompt, user_prompt=user_prompt,
+                                max_tokens=800, temperature=0.3)
+        if not raw or not raw.strip():
+            return JSONResponse(status_code=502, content={"message": "AI returned an empty response."})
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            lines = [ln for ln in lines if not ln.strip().startswith("```")]
+            cleaned = "\n".join(lines).strip()
+        try:
+            advice = json.loads(cleaned)
+        except Exception:
+            logger.warning(f"[Advice] LLM returned non-JSON for JD {jd_id}: {raw[:200]}")
+            return JSONResponse(status_code=502, content={"message": "AI returned an unreadable response."})
+
+        if not isinstance(advice, dict) or advice.get("verdict") not in ("APPLY", "MAYBE", "SKIP"):
+            return JSONResponse(status_code=502, content={"message": "AI returned an unreadable response."})
+
+        # Upsert cache (per CV+JD)
+        existing = db.query(ApplyAdviceCache).filter_by(
+            customer_id=customer_id, jd_id=jd_id, document_id=doc.id
+        ).first()
+        payload = json.dumps(advice)
+        if existing:
+            existing.advice_json = payload
+        else:
+            db.add(ApplyAdviceCache(
+                customer_id=customer_id, jd_id=jd_id,
+                document_id=doc.id, advice_json=payload,
+            ))
+        db.commit()
+
+        return JSONResponse(content={"advice": advice, "cached": False})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error generating apply advice: {e}")
         return JSONResponse(status_code=500, content={"message": "Internal server error."})
 
 # ---------------------------------------------------------

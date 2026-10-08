@@ -129,6 +129,7 @@ Always: `{ jd_id, jd_name, location, job_type{id,name}, job_function{id,name}, i
 With `Authorization` (candidate): adds `candidate_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[]` (detail page renders ✓ green / ✗ red).
 
 ### `POST /ats/jobs/{jd_id}/apply` (CUSTOMER) → 201 `{ message, application_id }` (400 if already in pipeline).
+### `GET /ats/jobs/{jd_id}/apply-advice?force=` (CUSTOMER) — LLM verdict `APPLY|MAYBE|SKIP` + `score_0_100/reason/strengths/gaps/two_week_plan/interview_tips`, cached per CV+JD in `apply_advice_cache` (`?force=1` regenerates). 400 no CV, 503 LLM unconfigured, 502 bad LLM output. Job page renders it via `ApplyAdviceCard`.
 ### `GET /ats/customer/applications` (CUSTOMER) → `{ applications: [{ application_id, company_name, jd_id, jd_name, stage, created_at }] }` (includes company `CONTACTED` requests; candidate Applications page splits `CONTACTED` into a Requests section with Accept/Decline + job link via `jd_id`).
 ### `PUT /ats/customer/applications/{application_id}/accept` (CUSTOMER) — `CONTACTED → CONSIDERED`.
 ### `PUT /ats/customer/applications/{application_id}/decline` (CUSTOMER) — `CONTACTED → CANCELLED` (400 unless `CONTACTED`, 404 if not owned).
