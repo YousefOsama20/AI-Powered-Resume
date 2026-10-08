@@ -9,13 +9,13 @@ import api from '@/lib/axios';
 export default function CandidateOnboarding() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [taxonomy, setTaxonomy] = useState<{job_types: any[], job_functions: any[]}>({ job_types: [], job_functions: [] });
-  
+  const [taxonomy, setTaxonomy] = useState<{ job_types: any[], job_functions: any[] }>({ job_types: [], job_functions: [] });
+
   // Profile Data
-  const [location, setLocation] = useState('Anywhere in the US');
+  const [location, setLocation] = useState('US');
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedFunctions, setSelectedFunctions] = useState<string[]>([]);
-  
+
   // File Upload Data
   const [file, setFile] = useState<File | null>(null);
 
@@ -42,7 +42,7 @@ export default function CandidateOnboarding() {
   const handleFileUpload = async () => {
     if (!file) return alert('Please select a file');
     setStep(3); // Scanning step
-    
+
     try {
       // 1. Upload
       const formData = new FormData();
@@ -76,7 +76,7 @@ export default function CandidateOnboarding() {
     return (
       <SplitScreenLayout heading="To get started, **what type of role** are you looking for?">
         <form onSubmit={handleProfileSubmit} className="space-y-8 w-full max-w-xl mx-auto">
-          
+
           <div>
             <label className="block text-sm font-bold text-gray-900 mb-4">* Job Function <span className="font-normal text-gray-400">(select as many as you like)</span></label>
             <MultiSelectDropdown
@@ -109,20 +109,20 @@ export default function CandidateOnboarding() {
 
           <div>
             <label className="block text-sm font-bold text-gray-900 mb-4">* Location</label>
-            <input 
-              type="text" 
-              required 
+            <input
+              type="text"
+              required
               className="w-full bg-gray-50 border-none rounded-lg p-4 text-gray-900 focus:ring-2 focus:ring-[#12b388] outline-none"
-              placeholder="Anywhere in the US"
+              placeholder="US"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
             />
           </div>
 
           <div className="flex justify-end mt-12">
-              <button type="submit" className="px-10 py-3.5 rounded-full bg-black text-white font-medium hover:bg-gray-800 transition-colors">
-                  Next
-              </button>
+            <button type="submit" className="px-10 py-3.5 rounded-full bg-black text-white font-medium hover:bg-gray-800 transition-colors">
+              Next
+            </button>
           </div>
         </form>
       </SplitScreenLayout>
@@ -133,7 +133,7 @@ export default function CandidateOnboarding() {
     return (
       <SplitScreenLayout heading="One last step, let's level up your search by **uploading your resume**">
         <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center">
-          
+
           <div className="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center mb-8 relative border-2 border-dashed border-gray-200">
             <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
             <div className="absolute -bottom-2 -right-2 bg-black text-white p-2 rounded-xl">
@@ -141,15 +141,15 @@ export default function CandidateOnboarding() {
             </div>
           </div>
 
-          <input 
-            type="file" 
-            id="resume-upload" 
-            className="hidden" 
+          <input
+            type="file"
+            id="resume-upload"
+            className="hidden"
             accept=".pdf,.doc,.docx"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
-          <label 
-            htmlFor="resume-upload" 
+          <label
+            htmlFor="resume-upload"
             className="px-8 py-4 rounded-full border-2 border-gray-200 text-gray-900 font-medium hover:border-[#12b388] cursor-pointer transition-colors mb-4 w-full max-w-sm block text-center"
           >
             {file ? file.name : "Upload Your Resume"}
@@ -161,13 +161,13 @@ export default function CandidateOnboarding() {
           </div>
 
           <div className="flex justify-center mt-12 w-full">
-              <button 
-                onClick={handleFileUpload}
-                disabled={!file}
-                className="px-10 py-3.5 rounded-full bg-[#12b388] text-white font-bold hover:bg-[#10a078] disabled:opacity-50 transition-colors w-64"
-              >
-                  Start Matching
-              </button>
+            <button
+              onClick={handleFileUpload}
+              disabled={!file}
+              className="px-10 py-3.5 rounded-full bg-[#12b388] text-white font-bold hover:bg-[#10a078] disabled:opacity-50 transition-colors w-64"
+            >
+              Start Matching
+            </button>
           </div>
         </div>
       </SplitScreenLayout>

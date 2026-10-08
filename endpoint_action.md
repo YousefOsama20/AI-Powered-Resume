@@ -39,7 +39,7 @@ Any. JSON body (not form): `{ "email": "...", "password": "..." }` → `{ "acces
 
 ### `GET /profile/customer` (CUSTOMER)
 ```json
-{ "email": "...", "name": "...", "phone": null, "location": "Anywhere in the US",
+{ "email": "...", "name": "...", "phone": null, "location": " US",
   "job_types": [{"id": "...", "name": "..."}], "job_functions": [{"id": "...", "name": "..."}] }
 ```
 
@@ -107,13 +107,13 @@ LLM classified skills → canonical → embed → Chroma id `{company_id}::{jd_n
 → `{ signal: "match_success", company_id, jd_skills: {essential[], elective[]}, total_matches, orphan_skipped, results: [{
   candidate_id, file_id, customer_id, candidate_name, candidate_location, file_name, document_id, has_accepted_request,
   match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score,
-  location_score, job_type_score, job_function_score,
+  job_type_score, job_function_score,
   required_experience, candidate_experience, experience_gap,
   matched_essential_skills[], matched_elective_skills[], missing_essential_skills[], missing_elective_skills[], extracted_skills[] }] }`
-Weights: `0.25 sem + 0.25 kw + 0.20 exp + 0.10 loc + 0.10 type + 0.10 func`. Keyword: `ess*0.75+ele*0.25`, strict mode drops elective when `ess<0.5`.
+Weights: `0.30 sem + 0.30 kw + 0.20 exp + 0.10 type + 0.10 func`. Keyword: `ess*0.75+ele*0.25`, strict mode drops elective when `ess<0.5`. Location text is display-only (no location score).
 
 ### `GET /nlp/recommend-jobs?document_id=&top_k=10` (CUSTOMER) — reverse-match primary CV vs public JDs.
-→ `{ recommended_jobs: [{ jd_id, jd_name, company_name, match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score, location_score, job_type_score, job_function_score, required_experience, essential_skills[], elective_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[], candidate_skills[] }] }`
+→ `{ recommended_jobs: [{ jd_id, jd_name, company_name, match_score, semantic_score, keyword_score, essential_score, elective_score, experience_score, job_type_score, job_function_score, required_experience, essential_skills[], elective_skills[], matched_essential_skills[], missing_essential_skills[], matched_elective_skills[], missing_elective_skills[], candidate_skills[] }] }`
 Dashboard renders Skill ring = `keyword_score` (tooltip adds essential/elective/semantic).
 
 ### `GET /nlp/debug-match?jd_id=&document_id=` (CUSTOMER, own CV)

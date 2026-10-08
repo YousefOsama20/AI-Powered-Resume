@@ -80,7 +80,6 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
             const overallMatch = Math.round(match.match_score || 0);
             const expMatch = Math.round(match.experience_score || 0);
             const skillMatch = Math.round(((match.keyword_score || 0) + (match.semantic_score || 0)) / 2);
-            const locMatch = Math.round(match.location_score || 0);
             const rowKey = match.candidate_id || match.file_id || match.customer_id;
 
             return (
@@ -126,10 +125,9 @@ export default function MatchesClient({ jd_id }: { jd_id: string }) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                       <MatchRing percentage={skillMatch} label="Skills" size={64} />
                       <MatchRing percentage={expMatch} label="Experience" size={64} />
-                      <MatchRing percentage={locMatch} label="Location" size={64} />
                       <MatchRing percentage={Math.round(match.job_type_score || 0)} label="Job Type" size={64} />
                     </div>
                   </div>
