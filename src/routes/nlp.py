@@ -299,12 +299,30 @@ async def store_job_description(request: NLPJDStoreRequest, current_user: User =
                 content={"message": "jd_name and job_description are required."}
             )
 
+        # Fail fast on duplicate titles: previously a repeat jd_name silently
+        # upserted the Chroma doc and skipped the SQL insert, returning 200
+        # while the JD list did not grow — looking like "can't post another JD".
+        duplicate = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
+        if duplicate:
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={"message": f"A job posting named '{jd_name}' already exists. Use a different title or edit the existing one."}
+            )
+
         # 1. Extract skills via LLM (classified) with heuristic fallback
         skills = _extract_jd_skills(job_description)
             
-        # 2. Extract required experience
-        experience_controller = ExperienceController()
-        required_exp = experience_controller.extract_required_experience(job_description)
+        # 2. Required experience: prefer the explicit form value when supplied,
+        # otherwise auto-extract from the JD text.
+        if request.required_experience is not None:
+            try:
+                required_exp = max(0.0, float(request.required_experience))
+            except (TypeError, ValueError):
+                experience_controller = ExperienceController()
+                required_exp = experience_controller.extract_required_experience(job_description)
+        else:
+            experience_controller = ExperienceController()
+            required_exp = experience_controller.extract_required_experience(job_description)
         
         # 3. Create embedding for the full JD
         embedding_controller = EmbeddingController()
@@ -329,8 +347,7 @@ async def store_job_description(request: NLPJDStoreRequest, current_user: User =
         
         if success:
             # 5. Store ownership in SQL Database
-            existing_jd = db.query(JobDescription).filter_by(company_id=company_id, jd_name=jd_name).first()
-            if not existing_jd:
+            try:
                 new_jd = JobDescription(
                     company_id=company_id, 
                     jd_name=jd_name,
@@ -341,10 +358,25 @@ async def store_job_description(request: NLPJDStoreRequest, current_user: User =
                 )
                 db.add(new_jd)
                 db.commit()
+                db.refresh(new_jd)
+                jd_id = new_jd.id
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error persisting JD ownership (company={company_id}, jd_name={jd_name}): {e}")
+                # Roll back the Chroma write to avoid SQL/Chroma drift.
+                try:
+                    jd_controller.delete_jd(jd_name, company_id=company_id)
+                except Exception:
+                    pass
+                return JSONResponse(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    content={"message": "Failed to save job posting. Please check Job Type/Function and try again."}
+                )
 
             return JSONResponse(
                 content={
                     "message": "Job description stored successfully.",
+                    "jd_id": jd_id,
                     "jd_name": jd_name,
                     "company_id": company_id,
                     "essential_skills": skills["essential"],
@@ -362,6 +394,10 @@ async def store_job_description(request: NLPJDStoreRequest, current_user: User =
             )
             
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         logger.error(f"Error storing JD: {e}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -15,6 +15,7 @@ class NLPJDStoreRequest(BaseModel):
     location: Optional[str] = None
     job_type_id: Optional[str] = None
     job_function_id: Optional[str] = None
+    required_experience: Optional[float] = None
 
 class NLPJDUpdateRequest(BaseModel):
     jd_name: str

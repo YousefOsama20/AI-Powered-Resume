@@ -8,16 +8,19 @@ import api from '@/lib/axios';
 export default function CreateJD() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [taxonomy, setTaxonomy] = useState<{job_types: any[], job_functions: any[]}>({ job_types: [], job_functions: [] });
-  
-  const [formData, setFormData] = useState({
+
+  const initialForm = {
     jd_name: '',
     location: '',
     job_type_id: '',
     job_function_id: '',
     job_description: '',
     is_public: 1
-  });
+  };
+  const [formData, setFormData] = useState(initialForm);
   const [requiredExperience, setRequiredExperience] = useState('0');
 
   useEffect(() => {
@@ -26,16 +29,41 @@ export default function CreateJD() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.job_type_id || !formData.job_function_id) return alert('Please select Job Type and Function.');
-    
+    if (!formData.job_type_id || !formData.job_function_id) {
+      setError('Please select Job Type and Function.');
+      return;
+    }
+
     setIsSubmitting(true);
+    setError('');
+    setSuccess('');
     try {
-      await api.post('/nlp/jd', formData);
-      alert('Job Description successfully analyzed and posted!');
-      router.push('/company/dashboard');
-    } catch (err) {
+      const payload = {
+        ...formData,
+        jd_name: formData.jd_name.trim(),
+        required_experience: requiredExperience === '' ? null : Number(requiredExperience),
+      };
+      await api.post('/nlp/jd', payload);
+      // Clear the form so a second JD can be posted immediately without
+      // a full reload. Previously stale state + a stuck isSubmitting flag
+      // forced users to sign out/in to post again.
+      setFormData(initialForm);
+      setRequiredExperience('0');
+      setSuccess('Job Description successfully analyzed and posted! You can post another one below.');
+      router.push('/company/jobs');
+      router.refresh();
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to post Job Description');
+      const status = err.response?.status;
+      const serverMsg = err.response?.data?.message;
+      if (status === 409) {
+        setError(serverMsg || 'A job with this title already exists. Please use a different title or edit the existing one.');
+      } else {
+        setError(serverMsg || 'Failed to post Job Description. Please try again.');
+      }
+    } finally {
+      // Always re-enable the button — success or failure — so consecutive
+      // JD posts work in the same session.
       setIsSubmitting(false);
     }
   };
@@ -49,6 +77,8 @@ export default function CreateJD() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium">{error}</div>}
+          {success && <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium">{success}</div>}
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">Job Title</label>
