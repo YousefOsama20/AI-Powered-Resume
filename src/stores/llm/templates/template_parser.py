@@ -43,7 +43,7 @@ class TemplateParser:
         Retrieves a prompt template by group and key.
 
         Args:
-            group: Template group name (e.g., "skill_extraction", "rag").
+            group: Template group name (e.g., "skill_extraction", "apply_advice").
             key:   Template key within the group (e.g., "system_prompt").
             vars:  Dict of variables to substitute into the template.
 

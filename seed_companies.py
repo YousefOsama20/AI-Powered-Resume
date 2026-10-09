@@ -51,7 +51,7 @@ def create_jd(token, jd_data):
 def main():
     # --- COMPANY 1 ---
     comp1_email = "ai_company@gmail.com"
-    comp1_password = "password123"
+    comp1_password = "123"
     comp1_name = "AI Innovations Inc."
     
     register_company(comp1_email, comp1_password, comp1_name)

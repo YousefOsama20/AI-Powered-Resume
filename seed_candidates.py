@@ -97,7 +97,7 @@ def main():
         print(f"Directory {CV_DIR} not found.")
         return
 
-    password = "password123"
+    password = "123"
     
     files = [f for f in os.listdir(CV_DIR) if f.lower().endswith('.pdf')]
     print(f"Found {len(files)} PDF files.")
