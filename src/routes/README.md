@@ -46,7 +46,7 @@ Package markers. `schemes/` holds `auth.py` (`UserRegisterRequest`, `UserLoginRe
 
 ## `ats.py` → prefix `/ats`
 Stages: `APPLIED, CONTACTED, CONSIDERED, INTERVIEWING, OFFER_SENT, HIRED, REJECTED, CANCELLED`.
-- Candidate: `GET /jobs/public`, `GET /jobs/public/{jd_id}` (public fields + personalized `matched/missing_*` + `candidate_skills` when `Authorization` present; `skills_source` = `stored|heuristic_fallback`), `POST /jobs/{jd_id}/apply` → `APPLIED` (400 if dup), `GET /customer/applications`, `PUT /customer/applications/{id}/accept` (`CONTACTED→CONSIDERED`).
+- Candidate: `GET /jobs/public`, `GET /jobs/public/{jd_id}` (public fields + personalized `matched/missing_*` + `candidate_skills` when `Authorization` present; `skills_source` = `stored|heuristic_fallback`), `POST /jobs/{jd_id}/apply` → `APPLIED` (400 if dup), `POST /jobs/{jd_id}/like` / `DELETE /jobs/{jd_id}/like` (idempotent save/unsave), `GET /customer/likes` (enriched + type filters) + `GET /customer/likes/ids` (heart painting), `GET /customer/applications`, `PUT /customer/applications/{id}/accept` (`CONTACTED→CONSIDERED`).
 - Company: `POST /company/contact {customer_id, jd_id}` → `CONTACTED`, `GET /board/{jd_id}` (grouped incl. `candidate_email/phone/match_score`), `PUT /board/{application_id}/move {stage}`.
 
 ## `dev.py` → prefix `/dev`

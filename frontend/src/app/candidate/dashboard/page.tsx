@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import MatchRing from '@/components/MatchRing';
 import JobTypeFilter, { buildJobTypeQuery, filterJobsByType } from '@/components/JobTypeFilter';
+import LikeButton from '@/components/LikeButton';
 import api from '@/lib/axios';
 import { Briefcase, MapPin } from 'lucide-react';
 
@@ -12,13 +13,18 @@ export default function CandidateDashboard() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [likedIds, setLikedIds] = useState<string[]>([]);
 
   const fetchJobs = useCallback(async (typeIds: string[]) => {
     setLoading(true);
     try {
       // Server-side filter: ?top_k=10&job_type_id=A&job_type_id=B (multi-select).
       const qs = buildJobTypeQuery(typeIds, { top_k: 10 });
-      const res = await api.get(`/nlp/recommend-jobs${qs}`);
+      const [res, likesRes] = await Promise.all([
+        api.get(`/nlp/recommend-jobs${qs}`),
+        api.get('/ats/customer/likes/ids').catch(() => ({ data: { jd_ids: [] } })),
+      ]);
+      setLikedIds(likesRes.data?.jd_ids || []);
       let list: any[] = res.data.recommended_jobs || [];
       // Client-side safety net: instant + guards against stale/unfiltered payloads.
       // Only applies when the payload actually carries job_type (new backend).
@@ -56,7 +62,7 @@ export default function CandidateDashboard() {
         <div className="flex gap-4 text-sm font-medium">
           <span className="text-black border-b-2 border-black pb-4 -mb-4 cursor-pointer">Recommended</span>
           <Link href="/candidate/jobs" className="text-gray-400 hover:text-gray-600 cursor-pointer">Browse All</Link>
-          <span className="text-gray-400 hover:text-gray-600 cursor-pointer">Liked</span>
+          <Link href="/candidate/liked" className="text-gray-400 hover:text-gray-600 cursor-pointer">Liked</Link>
           <Link href="/candidate/applications" className="text-gray-400 hover:text-gray-600 cursor-pointer">Applied</Link>
         </div>
       </div>
@@ -113,11 +119,14 @@ export default function CandidateDashboard() {
                     <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1 rounded-full w-max mb-4 ${lowSkill ? 'text-amber-700 bg-amber-100' : 'text-[#12b388] bg-[#12b388]/10'}`}>
                       {lowSkill ? '⚠️ Low skill overlap — strong on experience' : '✨ Why This Job Is A Match'}
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      <Link href={`/candidate/jobs/${job.jd_id}`} className="hover:text-[#12b388] transition-colors">
-                        {job.jd_name}
-                      </Link>
-                    </h3>
+                    <div className="flex items-start gap-2">
+                      <h3 className="text-xl font-bold text-gray-900 flex-1">
+                        <Link href={`/candidate/jobs/${job.jd_id}`} className="hover:text-[#12b388] transition-colors">
+                          {job.jd_name}
+                        </Link>
+                      </h3>
+                      <LikeButton jd_id={job.jd_id} initialLiked={likedIds.includes(job.jd_id)} />
+                    </div>
                     <p className="text-sm text-gray-500 mt-1 line-clamp-2">{job.company_name} • Required Exp: {job.required_experience} yrs</p>
                     <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 flex-wrap">
                       {(job.location) && (

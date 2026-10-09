@@ -10,7 +10,7 @@ import os
 from stores.db.database import get_db
 from models.sql_models import (
     User, JobApplication, JobDescription, PipelineStage, CustomerProfile,
-    CandidateDocument, ApplyAdviceCache, CompanyProfile, JobType, JobFunction,
+    CandidateDocument, ApplyAdviceCache, CompanyProfile, JobType, JobFunction, JobLike,
 )
 from routes.deps import get_current_company, get_current_customer
 from .schemes.requests import CreateRequest, UpdateRequestStatus, MoveCandidate
@@ -270,6 +270,126 @@ async def apply_to_job(
     except Exception as e:
         db.rollback()
         logger.error(f"Error applying to job: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.post("/jobs/{jd_id}/like")
+async def like_job(
+    jd_id: str,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """Save (like) a job for later. Idempotent — liking twice stays liked. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+
+        jd = db.query(JobDescription).filter_by(id=jd_id).first()
+        if not jd:
+            return JSONResponse(status_code=404, content={"message": "Job not found."})
+
+        existing = db.query(JobLike).filter_by(customer_id=customer_id, jd_id=jd_id).first()
+        if existing:
+            return JSONResponse(content={"liked": True, "message": "Job already liked."})
+
+        db.add(JobLike(customer_id=customer_id, jd_id=jd_id))
+        db.commit()
+        return JSONResponse(status_code=201, content={"liked": True, "message": "Job liked."})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error liking job: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.delete("/jobs/{jd_id}/like")
+async def unlike_job(
+    jd_id: str,
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """Remove a saved (liked) job. Idempotent — unliking twice stays unliked. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+
+        existing = db.query(JobLike).filter_by(customer_id=customer_id, jd_id=jd_id).first()
+        if not existing:
+            return JSONResponse(content={"liked": False, "message": "Job was not liked."})
+
+        db.delete(existing)
+        db.commit()
+        return JSONResponse(content={"liked": False, "message": "Job unliked."})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error unliking job: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.get("/customer/likes/ids")
+async def list_my_liked_ids(
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """Lightweight set of liked jd_ids for painting hearts in lists. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+        likes = db.query(JobLike).filter_by(customer_id=customer_id).all()
+        return JSONResponse(content={"jd_ids": [lk.jd_id for lk in likes]})
+    except Exception as e:
+        logger.error(f"Error listing liked ids: {e}")
+        return JSONResponse(status_code=500, content={"message": "Internal server error."})
+
+@ats_router.get("/customer/likes")
+async def list_my_likes(
+    job_type_id: List[str] = Query(default=[]),
+    job_type: List[str] = Query(default=[]),
+    job_function_id: List[str] = Query(default=[]),
+    job_function: List[str] = Query(default=[]),
+    current_user: User = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+    ):
+    """List all jobs the candidate liked, with company/type info. Supports the same multi-select type filters as Browse All. | Target: Customer"""
+    try:
+        customer_id = current_user.customer_profile.id
+
+        type_ids: List[str] = [str(v).strip() for v in (job_type_id or []) if str(v).strip()]
+        for name in (job_type or []):
+            n = str(name or "").strip()
+            if not n:
+                continue
+            row = db.query(JobType).filter(JobType.name.ilike(n)).first()
+            type_ids.append(str(row.id) if row else n)
+        func_ids: List[str] = [str(v).strip() for v in (job_function_id or []) if str(v).strip()]
+        for name in (job_function or []):
+            n = str(name or "").strip()
+            if not n:
+                continue
+            row = db.query(JobFunction).filter(JobFunction.name.ilike(n)).first()
+            func_ids.append(str(row.id) if row else n)
+
+        likes = (
+            db.query(JobLike)
+            .filter_by(customer_id=customer_id)
+            .order_by(JobLike.created_at.desc())
+            .all()
+        )
+        results = []
+        for lk in likes:
+            jd = lk.job_description
+            if not jd:
+                continue
+            if type_ids and (not jd.job_type_id or str(jd.job_type_id) not in type_ids):
+                continue
+            if func_ids and (not jd.job_function_id or str(jd.job_function_id) not in func_ids):
+                continue
+            results.append({
+                "jd_id": jd.id,
+                "jd_name": jd.jd_name,
+                "company_name": jd.company.company_name if jd.company else "Unknown",
+                "location": jd.location,
+                "job_type": {"id": jd.job_type.id, "name": jd.job_type.name} if jd.job_type else None,
+                "job_function": {"id": jd.job_function.id, "name": jd.job_function.name} if jd.job_function else None,
+                "created_at": jd.created_at.isoformat() if jd.created_at else None,
+                "liked_at": lk.created_at.isoformat() if lk.created_at else None,
+            })
+        return JSONResponse(content={"likes": results})
+    except Exception as e:
+        logger.error(f"Error listing likes: {e}")
         return JSONResponse(status_code=500, content={"message": "Internal server error."})
 
 @ats_router.get("/customer/applications")

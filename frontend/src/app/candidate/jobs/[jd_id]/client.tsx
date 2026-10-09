@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import ApplyAdviceCard from '@/components/ApplyAdviceCard';
+import LikeButton from '@/components/LikeButton';
 import api from '@/lib/axios';
 import { MapPin, Briefcase, Building2, Globe, ArrowLeft } from 'lucide-react';
 
@@ -13,6 +14,7 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [liked, setLiked] = useState(false);
 
   // Normalize API skills: backend returns arrays, but be tolerant of
   // comma-strings, null, or legacy shapes so the split never silently hides.
@@ -69,6 +71,11 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
         console.error(err);
         setLoading(false);
       });
+    api.get('/ats/customer/likes/ids')
+      .then(res => {
+        setLiked((res.data?.jd_ids || []).includes(jd_id));
+      })
+      .catch(() => {});
   }, [jd_id]);
 
   const handleApply = async () => {
@@ -164,13 +171,16 @@ export default function JobDetailClient({ jd_id }: { jd_id: string }) {
                 </div>
               </div>
             </div>
-            <button
-              onClick={handleApply}
-              disabled={applying || applied}
-              className="px-6 py-2.5 bg-[#12b388] text-white text-sm font-bold rounded-full hover:bg-[#10a078] transition-colors disabled:opacity-50 shrink-0"
-            >
-              {applied ? 'Applied ✓' : applying ? 'Applying...' : 'Easy Apply'}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <LikeButton jd_id={jd_id} initialLiked={liked} onToggle={setLiked} />
+              <button
+                onClick={handleApply}
+                disabled={applying || applied}
+                className="px-6 py-2.5 bg-[#12b388] text-white text-sm font-bold rounded-full hover:bg-[#10a078] transition-colors disabled:opacity-50 shrink-0"
+              >
+                {applied ? 'Applied ✓' : applying ? 'Applying...' : 'Easy Apply'}
+              </button>
+            </div>
           </div>
 
           {/* Company details */}

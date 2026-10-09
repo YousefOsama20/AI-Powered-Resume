@@ -8,7 +8,7 @@ import LikeButton from '@/components/LikeButton';
 import api from '@/lib/axios';
 import { Briefcase, MapPin, Building2 } from 'lucide-react';
 
-type PublicJob = {
+type LikedJob = {
   jd_id: string;
   jd_name: string;
   company_name: string;
@@ -16,25 +16,21 @@ type PublicJob = {
   job_type?: { id: string; name: string } | null;
   job_function?: { id: string; name: string } | null;
   created_at?: string | null;
+  liked_at?: string | null;
 };
 
-export default function BrowseAllJobs() {
-  const [jobs, setJobs] = useState<PublicJob[]>([]);
+export default function LikedJobs() {
+  const [jobs, setJobs] = useState<LikedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [likedIds, setLikedIds] = useState<string[]>([]);
 
   const fetchJobs = useCallback(async (typeIds: string[]) => {
     setLoading(true);
     try {
       const qs = buildJobTypeQuery(typeIds);
-      const [res, likesRes] = await Promise.all([
-        api.get(`/ats/jobs/public${qs}`),
-        api.get('/ats/customer/likes/ids').catch(() => ({ data: { jd_ids: [] } })),
-      ]);
-      setLikedIds(likesRes.data?.jd_ids || []);
-      let list: PublicJob[] = res.data.jobs || [];
+      const res = await api.get(`/ats/customer/likes${qs}`);
+      let list: LikedJob[] = res.data.likes || [];
       if (typeIds.length && list.length > 0 && (list[0] as any)?.job_type !== undefined) {
         list = filterJobsByType(list, typeIds);
       }
@@ -70,8 +66,8 @@ export default function BrowseAllJobs() {
         <h2 className="text-xl font-bold text-gray-900 mr-4">JOBS</h2>
         <div className="flex gap-4 text-sm font-medium">
           <Link href="/candidate/dashboard" className="text-gray-400 hover:text-gray-600 cursor-pointer">Recommended</Link>
-          <span className="text-black border-b-2 border-black pb-4 -mb-4 cursor-pointer">Browse All</span>
-          <Link href="/candidate/liked" className="text-gray-400 hover:text-gray-600 cursor-pointer">Liked</Link>
+          <Link href="/candidate/jobs" className="text-gray-400 hover:text-gray-600 cursor-pointer">Browse All</Link>
+          <span className="text-black border-b-2 border-black pb-4 -mb-4 cursor-pointer">Liked</span>
           <Link href="/candidate/applications" className="text-gray-400 hover:text-gray-600 cursor-pointer">Applied</Link>
         </div>
       </div>
@@ -89,19 +85,25 @@ export default function BrowseAllJobs() {
           <div className="bg-white rounded-2xl p-12 text-center border border-gray-100">
             {isFiltered ? (
               <>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No jobs match this filter</h3>
-                <p className="text-gray-500 mb-6">Try selecting more job types, or clear the filter to see everything.</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No liked jobs match this filter</h3>
+                <p className="text-gray-500 mb-6">Try selecting more job types, or clear the filter to see everything you liked.</p>
                 <button
                   onClick={() => setSelectedTypes([])}
                   className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-full hover:bg-gray-700 transition-colors"
                 >
-                  Show All Jobs
+                  Show All Liked
                 </button>
               </>
             ) : (
               <>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No public jobs yet</h3>
-                <p className="text-gray-500">Check back later — companies are still posting.</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">You haven&apos;t liked any jobs yet</h3>
+                <p className="text-gray-500 mb-6">Tap the heart on any job to save it here for later.</p>
+                <Link
+                  href="/candidate/jobs"
+                  className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-full hover:bg-gray-700 transition-colors inline-block"
+                >
+                  Browse All Jobs
+                </Link>
               </>
             )}
           </div>
@@ -142,7 +144,13 @@ export default function BrowseAllJobs() {
                   <span className="text-xs text-gray-400">{new Date(job.created_at).toLocaleDateString()}</span>
                 )}
                 <div className="flex gap-2 items-center">
-                  <LikeButton jd_id={job.jd_id} initialLiked={likedIds.includes(job.jd_id)} />
+                  <LikeButton
+                    jd_id={job.jd_id}
+                    initialLiked
+                    onToggle={(liked) => {
+                      if (!liked) setJobs((prev) => prev.filter((j) => j.jd_id !== job.jd_id));
+                    }}
+                  />
                   <Link
                     href={`/candidate/jobs/${job.jd_id}`}
                     className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-full hover:bg-gray-50 transition-colors"

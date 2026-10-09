@@ -65,6 +65,7 @@ class CustomerProfile(Base):
     job_functions = relationship("JobFunction", secondary=customer_job_function)
     applications = relationship("JobApplication", back_populates="customer", foreign_keys="[JobApplication.customer_id]")
     documents = relationship("CandidateDocument", back_populates="customer", cascade="all, delete-orphan")
+    likes = relationship("JobLike", back_populates="customer", cascade="all, delete-orphan")
 
 class CandidateDocument(Base):
     __tablename__ = "candidate_documents"
@@ -117,6 +118,7 @@ class JobDescription(Base):
 
     company = relationship("CompanyProfile", back_populates="jds")
     applications = relationship("JobApplication", back_populates="job_description", cascade="all, delete-orphan")
+    liked_by = relationship("JobLike", back_populates="job_description", cascade="all, delete-orphan")
 
 class JobType(Base):
     __tablename__ = "job_types"
@@ -167,3 +169,21 @@ class ApplyAdviceCache(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class JobLike(Base):
+    """
+    Candidate-saved ("liked") jobs. One row per (customer, JD);
+    unlike deletes the row. Liked JDs feed the Liked tab.
+    """
+    __tablename__ = "job_likes"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id = Column(String, ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False)
+    jd_id = Column(String, ForeignKey("job_descriptions.id", ondelete="CASCADE"), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("customer_id", "jd_id", name="uq_job_likes_customer_jd"),)
+
+    customer = relationship("CustomerProfile", back_populates="likes")
+    job_description = relationship("JobDescription", back_populates="liked_by")
